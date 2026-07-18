@@ -343,13 +343,15 @@ class Recorder:
 
         active.frame_count += 1
 
-        # Roll up metadata.
-        active.car_ordinal = int(frame.CarOrdinal)
-        active.car_class = int(frame.CarClass)
-        active.car_pi = int(frame.CarPerformanceIndex)
-        active.drivetrain = int(frame.DrivetrainType)
-        active.cylinders = int(frame.NumCylinders)
-        active.car_group = int(frame.CarGroup)
+        # Roll up metadata — but never from zeroed menu/loading frames
+        # (they would blank the car identity if the session ends in a menu).
+        if int(frame.CarOrdinal) != 0:
+            active.car_ordinal = int(frame.CarOrdinal)
+            active.car_class = int(frame.CarClass)
+            active.car_pi = int(frame.CarPerformanceIndex)
+            active.drivetrain = int(frame.DrivetrainType)
+            active.cylinders = int(frame.NumCylinders)
+            active.car_group = int(frame.CarGroup)
         best = sane_lap(frame.BestLap)
         if best > 0:
             if active.best_lap is None or best < active.best_lap:

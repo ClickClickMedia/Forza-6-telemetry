@@ -584,6 +584,43 @@ details.exporter > .menu .hint { font-size: 10px; color: var(--ink-mute); font-f
    ========================================================================= */
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
 
+/* bottom sheet (setup form) */
+.sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, .6);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+}
+.sheet {
+  position: fixed;
+  left: 50%; transform: translateX(-50%);
+  bottom: 0; top: max(20px, env(safe-area-inset-top));
+  width: min(680px, 100vw);
+  background: var(--carbon);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  z-index: 61;
+  display: flex; flex-direction: column;
+}
+.sheet > header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.sheet > .sheet-body { overflow-y: auto; padding: 14px 16px; flex: 1; -webkit-overflow-scrolling: touch; }
+.sheet > footer {
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  display: flex; gap: 8px;
+}
+.sheet > footer .btn { flex: 1; }
+.frm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 10px; }
+.frm-grid .full { grid-column: 1 / -1; }
+.frm-section { margin: 14px 0 6px; }
+.seg { display: flex; gap: 6px; }
+.seg .btn { flex: 1; }
+
 /* indeterminate loading bar */
 .loadbar {
   position: relative;

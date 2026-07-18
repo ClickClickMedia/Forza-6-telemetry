@@ -84,7 +84,8 @@
           '<details class="exporter"><summary class="btn small">Export ▾</summary>' +
             '<div class="menu">' +
               '<div class="hint">FOR AI TUNING</div>' +
-              '<button data-act="copyai" data-id="' + s.id + '">Copy tuning report for AI</button>' +
+              '<a href="/analysis?session=' + s.id + '&setupform=1">Copy for AI + my setup…</a>' +
+              '<button data-act="copyai" data-id="' + s.id + '">Copy data only for AI</button>' +
               '<a href="/api/sessions/' + s.id + '/tuning.md?download=1">Download tuning report (.md)</a>' +
               '<div class="hint">DATA</div>' +
               '<a href="/api/sessions/' + s.id + '/laps.csv">Per-lap summary (.csv)</a>' +
@@ -141,7 +142,7 @@
       try {
         if (act === "copyai") {
           btn.disabled = true;
-          const md = await api("/api/sessions/" + id + "/tuning.md");
+          const md = await api("/api/sessions/" + id + "/tuning.md?mode=data");
           const ok = await FH.copyText(md);
           toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
                    : "Copy failed — use Download instead");

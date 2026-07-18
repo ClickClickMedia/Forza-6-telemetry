@@ -103,8 +103,56 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any]) ->
     add("")
 
 
-def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str) -> str:
-    """Render the full tuning report for one session."""
+# Setup fields rendered in the report, in tuning-screen order. Values are
+# stored as free strings (unit-agnostic — enter what the game shows).
+SETUP_FIELDS = [
+    ("tp_f", "Tyre pressure F"), ("tp_r", "Tyre pressure R"),
+    ("final", "Final drive"), ("gears", "Per-gear ratios"),
+    ("camber_f", "Camber F"), ("camber_r", "Camber R"),
+    ("toe_f", "Toe F"), ("toe_r", "Toe R"), ("caster", "Caster"),
+    ("arb_f", "Anti-roll bar F"), ("arb_r", "Anti-roll bar R"),
+    ("spring_f", "Springs F"), ("spring_r", "Springs R"),
+    ("ride_f", "Ride height F"), ("ride_r", "Ride height R"),
+    ("reb_f", "Rebound damping F"), ("reb_r", "Rebound damping R"),
+    ("bump_f", "Bump damping F"), ("bump_r", "Bump damping R"),
+    ("aero_f", "Aero F"), ("aero_r", "Aero R"),
+    ("diff_accel", "Diff acceleration"), ("diff_decel", "Diff deceleration"),
+    ("diff_centre", "Diff centre balance"),
+    ("brake_bal", "Brake balance"), ("brake_pres", "Brake pressure"),
+]
+
+
+def _setup_section(add, setup: Dict[str, Any]) -> None:
+    data = setup.get("data") or {}
+    add(f"## My setup — {setup.get('label', 'current')} *(user-entered)*")
+    add("")
+    if data.get("car_text"):
+        add(f"- Car & build: **{data['car_text']}**")
+    if data.get("drivetrain"):
+        add(f"- Drivetrain (as built): **{data['drivetrain']}**")
+    if data.get("gearbox"):
+        add(f"- Gearbox upgrade: **{data['gearbox']}**")
+    filled = [(label, str(data.get(key)).strip())
+              for key, label in SETUP_FIELDS
+              if str(data.get(key) or "").strip()]
+    if filled:
+        add("")
+        add(_md_table(["Setting", "Value"], [[l, v] for l, v in filled]))
+    if data.get("goal"):
+        add("")
+        add(f"- **What I want:** {data['goal']}")
+    add("")
+
+
+def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
+                   setup: Dict[str, Any] = None,
+                   include_fill_in: bool = True) -> str:
+    """Render the full tuning report for one session.
+
+    ``setup`` embeds saved tuning-screen values (replacing the blank
+    fill-in block); ``include_fill_in=False`` produces the telemetry-only
+    variant ("copy data only").
+    """
     rep = lap_report(sd)
     session = rep["session"] or {}
     verdicts = rep["verdicts"] or {}
@@ -333,23 +381,32 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str) -> str:
         ))
         add("")
 
-    add("## My current setup (fill in before asking the AI)")
-    add("")
-    add("```")
-    add("Tyre pressure  F: ___ psi   R: ___ psi")
-    add("Gearing        final: ___   (per-gear if custom)")
-    add("Camber         F: ___°      R: ___°")
-    add("Toe            F: ___°      R: ___°")
-    add("Caster         ___°")
-    add("Anti-roll bars F: ___       R: ___")
-    add("Springs        F: ___       R: ___   Ride height F/R: ___ / ___")
-    add("Damping rebound F/R: ___ / ___   bump F/R: ___ / ___")
-    add("Aero           F: ___       R: ___")
-    add("Differential   accel/decel: ___ / ___  (centre balance if AWD)")
-    add("Brakes         balance: ___  pressure: ___")
-    add("What I want    e.g. \"less mid-corner understeer, keep exit traction\"")
-    add("```")
-    add("")
+    if setup is not None:
+        _setup_section(add, setup)
+    elif include_fill_in:
+        add("## My current setup (fill in before asking the AI)")
+        add("")
+        add("```")
+        add("Tyre pressure  F: ___    R: ___   (bar or psi, as the game shows)")
+        add("Gearing        final: ___   (per-gear if custom)")
+        add("Camber         F: ___°      R: ___°")
+        add("Toe            F: ___°      R: ___°")
+        add("Caster         ___°")
+        add("Anti-roll bars F: ___       R: ___")
+        add("Springs        F: ___       R: ___   Ride height F/R: ___ / ___")
+        add("Damping rebound F/R: ___ / ___   bump F/R: ___ / ___")
+        add("Aero           F: ___       R: ___")
+        add("Differential   accel/decel: ___ / ___  (centre balance if AWD)")
+        add("Brakes         balance: ___  pressure: ___")
+        add("What I want    e.g. \"less mid-corner understeer, keep exit traction\"")
+        add("```")
+        add("")
+    else:
+        add("## Setup values")
+        add("")
+        add("*(Telemetry-only export — no setup values provided. If you want "
+            "setup-specific advice, ask me for my current settings.)*")
+        add("")
 
     add("## Prompt for the AI")
     add("")

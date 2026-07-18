@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-07-18
+
+### Added
+- **Saved setups (Tune Profiles, phone-first).** "Copy for AI + my setup"
+  opens a thumb-friendly form — number-pad inputs for every tuning-screen
+  value, a drivetrain selector (FWD/RWD/AWD, pre-filled from telemetry,
+  driving which diff fields appear), gearbox type, car/build text and a
+  goal line. Saving stores the setup **versioned per car** (v1, v2, … or
+  your own name); next time you pick it from a dropdown, tweak, and save a
+  new version. The copied report embeds your actual values instead of a
+  blank fill-in block.
+- **"Copy data only"** — the telemetry-only report, one tap, for when the
+  AI already knows your setup.
+- Setups API: `GET/POST /api/setups`, and
+  `/api/sessions/{id}/tuning.md?setup_id=N` / `?mode=data`.
+
+### Fixed
+- Sessions ending on a menu/loading frame no longer blank their car
+  metadata ("ordinal 0"): zeroed frames are excluded from the metadata
+  roll-up.
+
 ## [2.0.1] - 2026-07-18
 
 ### Fixed
@@ -67,5 +88,6 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.0
 [2.0.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.1
 [2.0.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.0

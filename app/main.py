@@ -406,6 +406,43 @@ async def get_session(session_id: int) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Saved tune setups (user-entered tuning-screen values, versioned per car)
+# ---------------------------------------------------------------------------
+class SetupBody(BaseModel):
+    car_ordinal: int
+    label: Optional[str] = None
+    data: Dict[str, Any] = {}
+
+
+@app.get("/api/setups")
+async def list_setups(ordinal: int) -> Dict[str, Any]:
+    import json as _json
+    rows = _state().db.list_setups(ordinal)
+    for r in rows:
+        try:
+            r["data"] = _json.loads(r.pop("data") or "{}")
+        except ValueError:
+            r["data"] = {}
+    return {"setups": rows}
+
+
+@app.post("/api/setups")
+async def create_setup(body: SetupBody) -> Dict[str, Any]:
+    import json as _json
+    from datetime import datetime, timezone
+    st = _state()
+    label = (body.label or "").strip()
+    if not label:
+        label = f"v{st.db.count_setups(body.car_ordinal) + 1}"
+    sid = st.db.add_setup(
+        body.car_ordinal, label,
+        datetime.now(timezone.utc).isoformat(),
+        _json.dumps(body.data or {}),
+    )
+    return {"ok": True, "id": sid, "label": label}
+
+
+# ---------------------------------------------------------------------------
 # Car names (Forza only broadcasts a numeric ordinal; players name cars once)
 # ---------------------------------------------------------------------------
 class CarNameBody(BaseModel):
@@ -505,13 +542,26 @@ async def session_laps(session_id: int) -> Dict[str, Any]:
 
 
 @app.get("/api/sessions/{session_id}/tuning.md")
-async def session_tuning_md(session_id: int, download: int = 0) -> Response:
+async def session_tuning_md(session_id: int, download: int = 0,
+                            setup_id: Optional[int] = None,
+                            mode: str = "full") -> Response:
+    import json as _json
+
     from . import __version__
     from .tuning_export import build_markdown
+    st = _state()
     row = _session_or_404(session_id)
     row["car_name"] = _resolve_car_name(row.get("car_ordinal"))
+    setup = None
+    if setup_id is not None:
+        srow = st.db.get_setup(setup_id)
+        if srow is None:
+            raise HTTPException(status_code=404, detail="setup not found")
+        setup = {"label": srow["label"],
+                 "data": _json.loads(srow["data"] or "{}")}
     sd = _load_or_404(row)
-    md = build_markdown(sd, row, __version__)
+    md = build_markdown(sd, row, __version__, setup=setup,
+                        include_fill_in=(mode != "data"))
     headers = {}
     if download:
         headers["Content-Disposition"] = (

@@ -43,7 +43,8 @@
         </div>
         <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
         <div class="exportbar">
-          <button id="btnCopyAI" class="btn primary">Copy tuning report for AI</button>
+          <button id="btnCopySetup" class="btn primary">Copy for AI + my setup</button>
+          <button id="btnCopyData" class="btn">Copy data only</button>
           <a id="lnkMd" class="btn ghost" href="#">.md</a>
           <a id="lnkLapsCsv" class="btn ghost" href="#">Laps .csv</a>
           <a id="lnkRawCsv" class="btn ghost" href="#">Raw .csv</a>
@@ -157,6 +158,96 @@
 
     <footer class="foot">Session analysis · verdicts are provisional heuristics — argue in app/laps.py</footer>
   </main>
+
+  <!-- Setup sheet: capture tuning-screen values once, reuse forever -->
+  <div id="sheetBackdrop" class="sheet-backdrop hidden"></div>
+  <div id="setupSheet" class="sheet hidden" role="dialog" aria-label="Your setup">
+    <header>
+      <span class="eyebrow">Your setup · saved per car</span>
+      <button id="sheetClose" class="btn small ghost">✕ Close</button>
+    </header>
+    <div class="sheet-body">
+      <div id="savedRow" class="hidden" style="margin-bottom:12px;">
+        <label class="field"><span>Use a saved setup</span>
+          <select id="savedSel"></select></label>
+        <div class="btnrow" style="margin-top:8px;">
+          <button id="btnCopySaved" class="btn small primary">Copy report with this setup</button>
+          <span class="small muted">…or edit below and save as a new version</span>
+        </div>
+      </div>
+
+      <div class="frm-grid">
+        <label class="field full"><span>Car & build (free text)</span>
+          <input id="su_car_text" type="text" placeholder="2023 Acura Integra, race engine, semi-slicks"></label>
+        <label class="field full"><span>What I want from the tune</span>
+          <input id="su_goal" type="text" placeholder="touge leader, A class — less mid-corner understeer"></label>
+        <div class="field full"><span class="eyebrow" style="display:block;margin-bottom:5px;">Drivetrain (as built)</span>
+          <div class="seg" id="suDrive">
+            <button class="btn small" data-v="FWD">FWD</button>
+            <button class="btn small" data-v="RWD">RWD</button>
+            <button class="btn small" data-v="AWD">AWD</button>
+          </div>
+        </div>
+        <label class="field full"><span>Gearbox upgrade</span>
+          <select id="su_gearbox">
+            <option value="">—</option>
+            <option>Stock</option><option>Street</option>
+            <option>Sport</option><option>Race</option>
+          </select></label>
+
+        <div class="eyebrow full frm-section">Tyres (bar or psi — as the game shows)</div>
+        <label class="field"><span>Pressure F</span><input id="su_tp_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Pressure R</span><input id="su_tp_r" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Gearing</div>
+        <label class="field"><span>Final drive</span><input id="su_final" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Per-gear (optional)</span><input id="su_gears" type="text" placeholder="3.36 / 2.51 / …"></label>
+
+        <div class="eyebrow full frm-section">Alignment</div>
+        <label class="field"><span>Camber F (°)</span><input id="su_camber_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Camber R (°)</span><input id="su_camber_r" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Toe F (°)</span><input id="su_toe_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Toe R (°)</span><input id="su_toe_r" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Caster (°)</span><input id="su_caster" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Anti-roll bars</div>
+        <label class="field"><span>ARB F</span><input id="su_arb_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>ARB R</span><input id="su_arb_r" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Springs & ride height</div>
+        <label class="field"><span>Springs F</span><input id="su_spring_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Springs R</span><input id="su_spring_r" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Ride height F</span><input id="su_ride_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Ride height R</span><input id="su_ride_r" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Damping</div>
+        <label class="field"><span>Rebound F</span><input id="su_reb_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Rebound R</span><input id="su_reb_r" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Bump F</span><input id="su_bump_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Bump R</span><input id="su_bump_r" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Aero</div>
+        <label class="field"><span>Aero F</span><input id="su_aero_f" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Aero R</span><input id="su_aero_r" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Differential</div>
+        <label class="field"><span>Accel %</span><input id="su_diff_accel" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Decel %</span><input id="su_diff_decel" type="text" inputmode="decimal"></label>
+        <label class="field full hidden" id="rowDiffCentre"><span>Centre balance % (AWD)</span>
+          <input id="su_diff_centre" type="text" inputmode="decimal"></label>
+
+        <div class="eyebrow full frm-section">Brakes</div>
+        <label class="field"><span>Balance %</span><input id="su_brake_bal" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Pressure %</span><input id="su_brake_pres" type="text" inputmode="decimal"></label>
+
+        <label class="field full frm-section"><span>Save as (optional name)</span>
+          <input id="su_label" type="text" placeholder="auto: v1, v2, …"></label>
+      </div>
+    </div>
+    <footer>
+      <button id="btnSaveCopy" class="btn primary">Save setup & copy report</button>
+    </footer>
+  </div>
 
   <script src="/static/app.js"></script>
   <script>
@@ -292,6 +383,7 @@
     }
 
     function renderSession(rep, meta) {
+      curMeta = meta || {};
       setText("sessName", meta.name || ("Session " + sessionId));
       const cls = CLASS_LETTER[meta.car_class] != null ? CLASS_LETTER[meta.car_class] : "";
       setText("sessMeta", [
@@ -380,7 +472,6 @@
 
     async function loadAll() {
       if (!sessionId) return;
-      document.getElementById("btnCopyAI").dataset.id = sessionId;
       document.getElementById("lnkMd").href = "/api/sessions/" + sessionId + "/tuning.md?download=1";
       document.getElementById("lnkLapsCsv").href = "/api/sessions/" + sessionId + "/laps.csv";
       document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
@@ -440,29 +531,124 @@
       } catch (err) { toast("Saving name failed: " + err.message); }
     });
 
-    document.getElementById("btnCopyAI").addEventListener("click", async (e) => {
+    // ---------------- setup sheet + copy variants ----------------
+    const SETUP_KEYS = ["car_text", "goal", "gearbox", "tp_f", "tp_r",
+      "final", "gears", "camber_f", "camber_r", "toe_f", "toe_r", "caster",
+      "arb_f", "arb_r", "spring_f", "spring_r", "ride_f", "ride_r",
+      "reb_f", "reb_r", "bump_f", "bump_r", "aero_f", "aero_r",
+      "diff_accel", "diff_decel", "diff_centre", "brake_bal", "brake_pres"];
+    const DRIVE_NAME = { 0: "FWD", 1: "RWD", 2: "AWD" };
+    let curMeta = {};
+    let curDrive = "";
+    let savedSetups = [];
+    const suEl = (k) => document.getElementById("su_" + k);
+
+    function setDrive(v) {
+      curDrive = v || "";
+      document.querySelectorAll("#suDrive .btn").forEach((b) =>
+        b.classList.toggle("on", b.dataset.v === curDrive));
+      document.getElementById("rowDiffCentre")
+        .classList.toggle("hidden", curDrive !== "AWD");
+    }
+    document.querySelectorAll("#suDrive .btn").forEach((b) =>
+      b.addEventListener("click", () => setDrive(b.dataset.v)));
+
+    function fillForm(data) {
+      data = data || {};
+      SETUP_KEYS.forEach((k) => { const el = suEl(k); if (el) el.value = data[k] || ""; });
+      document.getElementById("su_label").value = "";
+      setDrive(data.drivetrain || curDrive);
+    }
+    function gatherForm() {
+      const d = {};
+      SETUP_KEYS.forEach((k) => {
+        const el = suEl(k);
+        const v = el ? el.value.trim() : "";
+        if (v) d[k] = v;
+      });
+      if (curDrive) d.drivetrain = curDrive;
+      return d;
+    }
+
+    async function copyReport(query, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const md = await api("/api/sessions/" + sessionId + "/tuning.md" + (query || ""));
+        const ok = await FH.copyText(md);
+        toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
+                 : "Copy failed — use the .md download instead");
+        return ok;
+      } catch (err) { toast("Export failed: " + err.message); return false; }
+      finally { if (btn) btn.disabled = false; }
+    }
+
+    const sheet = document.getElementById("setupSheet");
+    const backdrop = document.getElementById("sheetBackdrop");
+    function closeSheet() { sheet.classList.add("hidden"); backdrop.classList.add("hidden"); }
+    document.getElementById("sheetClose").addEventListener("click", closeSheet);
+    backdrop.addEventListener("click", closeSheet);
+
+    async function openSheet() {
+      const ordinal = curMeta.car_ordinal;
+      savedSetups = [];
+      if (ordinal != null && ordinal !== 0) {
+        try { savedSetups = (await api("/api/setups?ordinal=" + ordinal)).setups || []; }
+        catch (e) { savedSetups = []; }
+      }
+      const row = document.getElementById("savedRow");
+      row.classList.toggle("hidden", savedSetups.length === 0);
+      if (savedSetups.length) {
+        document.getElementById("savedSel").innerHTML = savedSetups.map((s, i) =>
+          '<option value="' + i + '">' + esc(s.label) + " · " +
+          esc((s.created_at || "").slice(0, 10)) + "</option>").join("");
+        fillForm(savedSetups[0].data);
+      } else {
+        fillForm({});
+        if (curMeta.car_name) suEl("car_text").value = curMeta.car_name;
+        setDrive(DRIVE_NAME[curMeta.drivetrain] || "");
+      }
+      sheet.classList.remove("hidden");
+      backdrop.classList.remove("hidden");
+    }
+
+    document.getElementById("savedSel").addEventListener("change", (e) => {
+      const s = savedSetups[Number(e.target.value)];
+      if (s) fillForm(s.data);
+    });
+    document.getElementById("btnCopySaved").addEventListener("click", async (e) => {
+      const s = savedSetups[Number(document.getElementById("savedSel").value)];
+      if (!s) return;
+      if (await copyReport("?setup_id=" + s.id, e.currentTarget)) closeSheet();
+    });
+    document.getElementById("btnSaveCopy").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
+      const ordinal = curMeta.car_ordinal;
+      if (ordinal == null) { toast("No car in this session"); return; }
       btn.disabled = true;
       try {
-        const md = await api("/api/sessions/" + sessionId + "/tuning.md");
-        const ok = await FH.copyText(md);
-        if (ok) {
-          toast("Copied! Paste into Claude or ChatGPT for analysis");
-          const original = btn.textContent;
-          btn.textContent = "✓ Copied!";
-          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 2200);
-          return;
-        }
-        toast("Copy failed — use the .md download instead");
-      } catch (err) { toast("Export failed: " + err.message); }
+        const res = await api("/api/setups", { json: {
+          car_ordinal: ordinal,
+          label: document.getElementById("su_label").value.trim(),
+          data: gatherForm(),
+        }});
+        toast("Setup saved as " + res.label);
+        if (await copyReport("?setup_id=" + res.id)) closeSheet();
+      } catch (err) { toast("Save failed: " + err.message); }
       btn.disabled = false;
     });
+
+    document.getElementById("btnCopySetup").addEventListener("click", openSheet);
+    document.getElementById("btnCopyData").addEventListener("click", (e) =>
+      copyReport("?mode=data", e.currentTarget));
 
     window.addEventListener("resize", drawRoute);
 
     (async function () {
       await populateSessions();
-      if (sessionId) loadAll();
+      if (sessionId) {
+        await loadAll();
+        if (FH.qs("setupform") === "1") openSheet();
+      }
     })();
   })();
   </script>

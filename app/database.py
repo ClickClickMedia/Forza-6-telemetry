@@ -54,6 +54,17 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Saved tune setups, versioned per car ordinal. `data` is a JSON object of
+-- tuning-screen values (user-entered; telemetry cannot read the garage).
+CREATE TABLE IF NOT EXISTS setups (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    car_ordinal INTEGER NOT NULL,
+    label       TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL,
+    data        TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_setups_ordinal ON setups(car_ordinal);
 """
 
 
@@ -228,6 +239,42 @@ class Database:
                 "UPDATE sessions SET best_lap = ? WHERE id = ?",
                 (best_lap, session_id),
             )
+
+    # -- Setups ------------------------------------------------------------
+    def add_setup(self, car_ordinal: int, label: str, created_at: str,
+                  data_json: str) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                """INSERT INTO setups (car_ordinal, label, created_at, data)
+                   VALUES (?, ?, ?, ?)""",
+                (car_ordinal, label, created_at, data_json),
+            )
+            return int(cur.lastrowid)
+
+    def list_setups(self, car_ordinal: int) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, car_ordinal, label, created_at, data
+                   FROM setups WHERE car_ordinal = ? ORDER BY id DESC""",
+                (car_ordinal,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_setup(self, setup_id: int) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, car_ordinal, label, created_at, data FROM setups WHERE id = ?",
+                (setup_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def count_setups(self, car_ordinal: int) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) AS n FROM setups WHERE car_ordinal = ?",
+                (car_ordinal,),
+            ).fetchone()
+        return int(row["n"])
 
     # -- Markers -----------------------------------------------------------
     def add_marker(self, session_id: int, t_mono: float, label: str) -> int:
