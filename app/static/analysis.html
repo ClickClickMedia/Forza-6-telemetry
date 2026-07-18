@@ -250,6 +250,20 @@
         <label class="field"><span>Balance %</span><input id="su_brake_bal" type="text" inputmode="decimal"></label>
         <label class="field"><span>Pressure %</span><input id="su_brake_pres" type="text" inputmode="decimal"></label>
 
+        <div class="eyebrow full frm-section">Assists (difficulty settings)</div>
+        <div class="field"><span class="eyebrow" style="display:block;margin-bottom:5px;">ABS</span>
+          <div class="seg" id="suAbs">
+            <button class="btn small" data-v="On">On</button>
+            <button class="btn small" data-v="Off">Off</button>
+          </div>
+        </div>
+        <div class="field"><span class="eyebrow" style="display:block;margin-bottom:5px;">Traction control</span>
+          <div class="seg" id="suTcs">
+            <button class="btn small" data-v="On">On</button>
+            <button class="btn small" data-v="Off">Off</button>
+          </div>
+        </div>
+
         <label class="field full frm-section"><span>Save as (optional name)</span>
           <input id="su_label" type="text" placeholder="auto: v1, v2, …"></label>
       </div>
@@ -572,6 +586,21 @@
     document.querySelectorAll("#suDrive .btn").forEach((b) =>
       b.addEventListener("click", () => setDrive(b.dataset.v)));
 
+    // ABS/TCS aren't on the wire — user-declared so the report can tell
+    // "braking at the ABS threshold" apart from a real lockup problem.
+    // Tapping the active choice again clears it back to "not stated".
+    const ASSIST_SEGS = { abs_assist: "suAbs", tcs_assist: "suTcs" };
+    const assistVals = { abs_assist: "", tcs_assist: "" };
+    function setAssist(key, v) {
+      assistVals[key] = v || "";
+      document.querySelectorAll("#" + ASSIST_SEGS[key] + " .btn").forEach((b) =>
+        b.classList.toggle("on", b.dataset.v === assistVals[key]));
+    }
+    Object.entries(ASSIST_SEGS).forEach(([key, id]) =>
+      document.querySelectorAll("#" + id + " .btn").forEach((b) =>
+        b.addEventListener("click", () =>
+          setAssist(key, assistVals[key] === b.dataset.v ? "" : b.dataset.v))));
+
     // Phone number pads have no minus key — the ± button toggles the sign
     // of signed fields (camber/toe) without leaving the numeric keyboard.
     document.querySelectorAll(".sign-btn").forEach((b) =>
@@ -594,6 +623,7 @@
       SETUP_KEYS.forEach((k) => { const el = suEl(k); if (el) el.value = data[k] || ""; });
       document.getElementById("su_label").value = "";
       setDrive(data.drivetrain || curDrive);
+      Object.keys(ASSIST_SEGS).forEach((k) => setAssist(k, data[k] || ""));
     }
     function gatherForm() {
       const d = {};
@@ -603,6 +633,7 @@
         if (v) d[k] = v;
       });
       if (curDrive) d.drivetrain = curDrive;
+      Object.entries(assistVals).forEach(([k, v]) => { if (v) d[k] = v; });
       return d;
     }
 

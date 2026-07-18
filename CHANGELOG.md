@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.7] - 2026-07-18
+
+### Added
+- **Braking is now told apart as three states, not one**: sustained lock
+  (wheel-speed deficit), braking at the lock threshold (deep slip with the
+  wheels still turning — the ABS-modulation signature), and normal braking.
+  Real captures show 53-79% of braking time at the threshold with under 1%
+  sustained lock: braking at the grip ceiling with ABS working, not a
+  setup fault. The report prints both numbers with that framing.
+- **ABS and traction-control declarations** in the setup form (the wire
+  does not broadcast assist states). With ABS declared on, the report
+  tells the AI to judge brake pressure only on sustained locks or
+  instability — never on threshold time alone. With TCS on, wheelspin is
+  framed as what the assist could not contain.
+
 ## [2.1.6] - 2026-07-18
 
 ### Fixed

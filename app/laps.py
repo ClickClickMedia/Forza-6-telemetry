@@ -453,6 +453,19 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
         min(100.0, lock_any_raw / braking_time_s * 100.0), 1
     ) if braking_time_s > 0.5 else 0.0
 
+    # Time braking AT the lock threshold (deep slip excursions with the
+    # wheels still turning) — the ABS-modulation signature. Not a fault:
+    # with ABS on it means braking at the grip ceiling. Reported separately
+    # from sustained lock so neither masquerades as the other.
+    near_lock_mask = (
+        np.logical_or.reduce([r < -0.5 for r in slip_ratio])
+        & (brake > 0.6) & moving & no_handbrake
+    )
+    near_lock_s = round(float(np.sum(dt[near_lock_mask])), 1)
+    near_lock_pct = round(
+        min(100.0, near_lock_s / braking_time_s * 100.0), 1
+    ) if braking_time_s > 0.5 else 0.0
+
     # Channels the game broadcasts identically (e.g. rear tyre temps on
     # many cars) — worth disclosing so nobody chases a phantom asymmetry.
     rear_temps_identical = bool(np.mean(
@@ -570,6 +583,8 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "brake_lock_method": lock_method,
             "braking_time_s": round(braking_time_s, 1),
             "lock_pct_of_braking": lock_pct_of_braking,
+            "near_lock_s": near_lock_s,
+            "near_lock_pct_of_braking": near_lock_pct,
             "rear_temps_wire_identical": rear_temps_identical,
         },
         "observed_peaks": {

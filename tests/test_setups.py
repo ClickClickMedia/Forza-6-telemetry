@@ -44,6 +44,21 @@ def test_export_embeds_setup_values():
     assert "fill in before asking the AI" not in md
 
 
+def test_export_renders_declared_assists():
+    """ABS/TCS aren't on the wire — when the user declares them, the report
+    must state them AND tell the AI how to weigh lock-threshold time."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v1", "data": {
+        "car_text": "Pantera", "abs_assist": "On", "tcs_assist": "Off",
+    }}
+    md = build_markdown(sd, META, "2.1.7", setup=setup)
+    assert "Assists: **ABS on, traction control off**" in md
+    assert "assist working as intended" in md
+    # Every report carries both brake numbers, clearly told apart.
+    assert "Sustained brake locks" in md
+    assert "ABS-style slip modulation" in md
+
+
 def test_export_data_only_mode():
     sd = _synthetic_session(seconds=30.0)
     md = build_markdown(sd, META, "2.1.0", setup=None, include_fill_in=False)

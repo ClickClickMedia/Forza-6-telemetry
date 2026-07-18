@@ -134,6 +134,22 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
         add(f"- Drivetrain (as built): **{data['drivetrain']}**")
     if data.get("gearbox"):
         add(f"- Gearbox upgrade: **{data['gearbox']}**")
+    abs_a, tcs = data.get("abs_assist"), data.get("tcs_assist")
+    if abs_a or tcs:
+        parts = ([f"ABS {abs_a.lower()}"] if abs_a else []) + \
+                ([f"traction control {tcs.lower()}"] if tcs else [])
+        add(f"- Assists: **{', '.join(parts)}**")
+    if abs_a == "On":
+        add("  - With ABS on, time at the lock threshold is the assist "
+            "working as intended — judge brake pressure only on sustained "
+            "locks, stopping instability, or overshot corners.")
+    elif abs_a == "Off":
+        add("  - ABS is off: lock-threshold time is driver threshold "
+            "braking; sustained locks point at brake pressure/balance.")
+    if tcs == "On":
+        add("  - With traction control on, recorded wheelspin is what the "
+            "assist could not contain — treat it as a floor, not the full "
+            "traction picture.")
     filled = [(label, str(data.get(key)).strip())
               for key, label in SETUP_FIELDS
               if str(data.get(key) or "").strip()]
@@ -352,13 +368,18 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             f"front axle — the chassis/tyres may not be able to deploy this "
             f"output. Worth asking whether tyre compound/width upgrades (or "
             f"trading power away) fit the goal better than tune changes alone.")
-    add(f"- Brake locks *(detector: {trac.get('brake_lock_method', 'wheel-speed deficit')})*: "
+    add(f"- Sustained brake locks *(detector: {trac.get('brake_lock_method', 'wheel-speed deficit')})*: "
         f"front {trac.get('brake_lock_front_events', 0)} event(s) / "
         f"{trac.get('brake_lock_front_s', 0):.1f} s · rear "
         f"{trac.get('brake_lock_rear_events', 0)} event(s) / "
         f"{trac.get('brake_lock_rear_s', 0):.1f} s · "
         f"**{trac.get('lock_pct_of_braking', 0):.0f}% of braking time** "
         f"({trac.get('braking_time_s', 0):.0f} s under brakes; handbrake excluded)")
+    add(f"- Braking at the lock threshold (ABS-style slip modulation, wheels "
+        f"still turning): {trac.get('near_lock_s', 0):.1f} s = "
+        f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time** — "
+        f"with ABS on this is normal threshold braking, not a fault; only "
+        f"recommend brake-pressure changes on sustained lock or instability")
     inputs = session.get("inputs", {})
     add(f"- Full throttle: {inputs.get('pct_full_throttle', 0):.1f} % of session · "
         f"Braking: {inputs.get('pct_braking', 0):.1f} %")

@@ -215,6 +215,11 @@ def test_brake_lock_requires_wheel_stoppage_not_just_slip():
     # Only phase B (~10 s) counts; phase A's slip excursion must not.
     front_s = trac["brake_lock_front_s"]
     assert 8.0 < front_s < 12.0, front_s
+    # Phase A is exactly the ABS-modulation signature (deep slip, wheels
+    # still turning) — it must surface as near-lock time, kept separate
+    # from sustained lock so neither number hides the other.
+    assert 8.0 < trac["near_lock_s"] < 12.0, trac["near_lock_s"]
+    assert trac["near_lock_pct_of_braking"] > 0
 
 
 def test_observed_peaks_ignore_partial_throttle():
