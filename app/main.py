@@ -91,6 +91,19 @@ async def lifespan(app: FastAPI):
 
     state = AppState()
     state.db = Database(settings.db_path)
+
+    # One-time migration: recordings made with v1.0.x were decoded under a
+    # mis-specified packet layout. Detect and re-decode them (originals are
+    # kept as *.v1bak). No-op when there is nothing to rescue.
+    try:
+        from .rescue import rescue_data_dir
+        rescued = rescue_data_dir(settings.sessions_dir, state.db)
+        if rescued:
+            log.info("v1.0.x recordings rescued",
+                     extra={"extra": {"count": len(rescued)}})
+    except Exception:  # pragma: no cover - rescue must never block startup
+        log.exception("v1 recording rescue failed; continuing")
+
     state.hub = TelemetryHub(push_hz=settings.push_hz)
     state.recorder = Recorder(
         db=state.db,
