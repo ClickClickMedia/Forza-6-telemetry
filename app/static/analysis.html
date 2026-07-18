@@ -4,153 +4,178 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FH6 Telemetry — Analysis</title>
-  <meta name="theme-color" content="#0d1117" />
+  <meta name="theme-color" content="#16130F" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <nav class="nav">
-    <span class="brand"><span class="fh">FH6</span> Telemetry</span>
-    <a class="navlink" href="/">Live</a>
-    <a class="navlink" href="/sessions">Sessions</a>
-    <a class="navlink" href="/analysis">Analysis</a>
-    <a class="navlink" href="/compare">Compare</a>
-    <a class="navlink" href="/debug">Debug</a>
-  </nav>
-
   <main class="page">
     <div class="spread" style="margin-bottom:12px;">
-      <h1 id="title">Session Analysis</h1>
-      <label class="field" style="min-width:220px;">
+      <h1 style="margin:0;">Analysis</h1>
+      <label class="field" style="min-width:min(280px, 100%);">
         <span>Session</span>
         <select id="sessionSel"></select>
       </label>
     </div>
 
     <div id="msg" class="notice hidden"></div>
+
     <div id="content" class="hidden">
 
-      <div class="card" style="margin-bottom:12px;">
+      <!-- Session header + export bar -->
+      <div class="card" style="margin-bottom:10px;">
         <div class="spread">
-          <div><h2 id="sessName">–</h2><span id="sessMeta" class="muted mono" style="font-size:12px;"></span></div>
+          <div style="min-width:0;">
+            <h2 id="sessName" style="margin:0;">–</h2>
+            <span id="sessMeta" class="eyebrow"></span>
+          </div>
           <div class="btnrow">
-            <span class="pill" id="pillFrames">– frames</span>
+            <span class="pill" id="pillFrames">–</span>
             <span class="pill" id="pillDur">–</span>
-            <a class="btn small" id="csvLink" href="#">Download CSV</a>
+            <span class="pill amber" id="pillBest">–</span>
           </div>
         </div>
-        <p id="notes" class="muted" style="margin:8px 0 0;font-size:13px;"></p>
-      </div>
-
-      <!-- Route -->
-      <div class="card" style="margin-bottom:12px;">
-        <div class="spread">
-          <div class="section-title">Route</div>
-          <div class="btnrow">
-            <span class="muted" style="font-size:12px;">Colour by</span>
-            <button class="btn small on" data-colour="speed">Speed</button>
-            <button class="btn small" data-colour="rear_slip">Rear slip</button>
-          </div>
-        </div>
-        <canvas id="routeCanvas" class="chart" style="height:340px;"></canvas>
-        <div class="legend" style="margin-top:8px;">
-          <span><span class="swatch" style="background:rgb(74,163,255)"></span>low</span>
-          <span><span class="swatch" style="background:rgb(55,214,122)"></span>mid</span>
-          <span><span class="swatch" style="background:rgb(255,77,79)"></span>high</span>
-          <span id="routeLabel" class="muted"></span>
+        <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
+        <div class="exportbar">
+          <button id="btnCopyAI" class="btn primary">Copy tuning report for AI</button>
+          <a id="lnkMd" class="btn" href="#">.md</a>
+          <a id="lnkLapsCsv" class="btn" href="#">Laps .csv</a>
+          <a id="lnkRawCsv" class="btn ghost" href="#">Raw .csv</a>
         </div>
       </div>
 
-      <div class="grid cols-3">
-        <!-- Speed -->
-        <div class="card">
-          <div class="section-title">Speed</div>
-          <div class="grid cols-2">
-            <div class="readout"><span class="label">Peak</span><span class="value" style="font-size:26px" id="spPeak">–</span><span class="unit">km/h</span></div>
-            <div class="readout"><span class="label">Average</span><span class="value" style="font-size:26px" id="spAvg">–</span><span class="unit">km/h</span></div>
-            <div class="readout"><span class="label">Peak (m/s)</span><span class="value mono" style="font-size:20px" id="spPeakMs">–</span></div>
-          </div>
+      <!-- Tuning verdicts -->
+      <div class="verdict-cards" style="margin-bottom:10px;">
+        <div class="card verdict">
+          <span class="eyebrow">Balance</span>
+          <span class="headline" id="vBalance">–</span>
+          <div class="axle-row"><span style="width:44px;">FRONT</span>
+            <div class="bar-h"><i id="axleFront" style="background:var(--cold)"></i></div>
+            <span id="axleFrontV" style="min-width:4ch;text-align:right;">–</span></div>
+          <div class="axle-row"><span style="width:44px;">REAR</span>
+            <div class="bar-h"><i id="axleRear" style="background:var(--over)"></i></div>
+            <span id="axleRearV" style="min-width:4ch;text-align:right;">–</span></div>
+          <span class="why" id="vBalanceWhy"></span>
         </div>
-        <!-- Acceleration -->
-        <div class="card">
-          <div class="section-title">Acceleration</div>
-          <div class="grid cols-2">
-            <div class="readout"><span class="label">Max lat</span><span class="value" style="font-size:26px" id="acLat">–</span><span class="unit">g</span></div>
-            <div class="readout"><span class="label">Max accel</span><span class="value" style="font-size:26px" id="acLon">–</span><span class="unit">g</span></div>
-            <div class="readout"><span class="label">Max brake</span><span class="value" style="font-size:26px" id="acBrk">–</span><span class="unit">g</span></div>
-            <div class="readout"><span class="label">Max lat</span><span class="value mono" style="font-size:20px" id="acLatMs">–</span><span class="unit">m/s²</span></div>
-          </div>
+        <div class="card verdict">
+          <span class="eyebrow">Tyre temps</span>
+          <span class="headline" id="vTemps">–</span>
+          <div class="axle-row"><span style="width:44px;">FRONT</span><span id="tFront" class="nowrap">–</span></div>
+          <div class="axle-row"><span style="width:44px;">REAR</span><span id="tRear" class="nowrap">–</span></div>
+          <span class="why" id="vTempsWhy"></span>
         </div>
-        <!-- Inputs -->
-        <div class="card">
-          <div class="section-title">Inputs</div>
-          <div class="readout"><span class="label">Full throttle</span><span class="value" style="font-size:24px" id="inThr">–</span><span class="unit">%</span></div>
-          <div class="readout" style="margin-top:6px;"><span class="label">Braking</span><span class="value" style="font-size:24px" id="inBrk">–</span><span class="unit">%</span></div>
-          <div class="readout" style="margin-top:6px;"><span class="label">Coasting</span><span class="value" style="font-size:24px" id="inCoast">–</span><span class="unit">%</span></div>
+        <div class="card verdict">
+          <span class="eyebrow">Traction &amp; chassis</span>
+          <span class="headline" id="vTraction">–</span>
+          <span class="why" id="vTractionWhy"></span>
         </div>
       </div>
 
-      <div class="grid cols-2" style="margin-top:12px;">
-        <!-- Gear usage -->
-        <div class="card">
-          <div class="section-title">Gear usage (seconds)</div>
-          <canvas id="gearCanvas" class="chart" style="height:170px;"></canvas>
-        </div>
-        <!-- Shift RPM + laps -->
-        <div class="card">
-          <div class="section-title">Shift RPM</div>
-          <div class="grid cols-4">
-            <div class="readout"><span class="label">Count</span><span class="value" style="font-size:22px" id="shCount">–</span></div>
-            <div class="readout"><span class="label">Avg</span><span class="value" style="font-size:22px" id="shAvg">–</span></div>
-            <div class="readout"><span class="label">Min</span><span class="value" style="font-size:22px" id="shMin">–</span></div>
-            <div class="readout"><span class="label">Max</span><span class="value" style="font-size:22px" id="shMax">–</span></div>
-          </div>
-          <div class="section-title" style="margin-top:14px;">Laps</div>
-          <div class="grid cols-2">
-            <div class="readout"><span class="label">Best lap</span><span class="value mono accent" style="font-size:22px" id="lapBest">–</span></div>
-            <div class="readout"><span class="label">Lap count</span><span class="value" style="font-size:22px" id="lapCount">–</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tyres -->
-      <div class="card" style="margin-top:12px;">
-        <div class="section-title">Tyres</div>
+      <!-- Laps -->
+      <div class="card" id="lapsCard" style="margin-bottom:10px;">
+        <div class="card-head"><span class="eyebrow">Laps</span><span class="eyebrow" id="lapsNote"></span></div>
         <div class="tablewrap">
-          <table class="data">
-            <thead><tr><th>Tyre</th><th class="right">Temp min</th><th class="right">Temp avg</th><th class="right">Temp max</th><th class="right">Time over comb-slip&gt;1 (s)</th></tr></thead>
-            <tbody id="tyreBody"></tbody>
+          <table class="data laps-table">
+            <thead><tr>
+              <th>Lap</th><th class="right">Time</th><th class="right">Avg</th>
+              <th class="right">Max</th><th class="right">Thr%</th>
+              <th class="right">Brk%</th><th class="right">USI</th><th class="right">ΔT°C</th>
+            </tr></thead>
+            <tbody id="lapsBody"></tbody>
           </table>
         </div>
       </div>
 
-      <!-- Events -->
-      <div class="card" style="margin-top:12px;">
-        <div class="section-title">Events</div>
+      <!-- Route -->
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head">
+          <span class="eyebrow">Route</span>
+          <div class="btnrow">
+            <button class="btn small on" data-colour="speed">Speed</button>
+            <button class="btn small" data-colour="rear_slip">Rear slip</button>
+          </div>
+        </div>
+        <canvas id="routeCanvas" class="chart" style="height:320px;"></canvas>
+        <div class="legend" style="margin-top:8px;">
+          <span><span class="swatch" style="background:#4FA8FF"></span>low</span>
+          <span><span class="swatch" style="background:#3BD98A"></span>mid</span>
+          <span><span class="swatch" style="background:#FF4D42"></span>high</span>
+          <span id="routeLabel"></span>
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="margin-bottom:10px;">
+        <div class="card">
+          <div class="card-head"><span class="eyebrow">Gear usage (seconds)</span></div>
+          <canvas id="gearCanvas" class="chart" style="height:170px;"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="eyebrow">Gearing &amp; shifts</span></div>
+          <div class="grid cols-2">
+            <div class="stat"><span class="eyebrow">Avg shift</span><span class="v" id="shAvg">–</span><span class="u">rpm</span></div>
+            <div class="stat"><span class="eyebrow">Upshifts</span><span class="v" id="shCount">–</span></div>
+            <div class="stat"><span class="eyebrow">On limiter</span><span class="v" id="limiterPct">–</span><span class="u">% of time</span></div>
+            <div class="stat"><span class="eyebrow">Top gear</span><span class="v" id="topGear">–</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="margin-bottom:10px;">
+        <div class="card">
+          <div class="card-head"><span class="eyebrow">Tyres (°C)</span></div>
+          <div class="tablewrap">
+            <table class="data">
+              <thead><tr><th>Tyre</th><th class="right">Avg</th><th class="right">Max</th><th class="right">Slide time s</th></tr></thead>
+              <tbody id="tyreBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="eyebrow">Suspension travel (0–1)</span></div>
+          <div class="tablewrap">
+            <table class="data">
+              <thead><tr><th>Corner</th><th class="right">Avg</th><th class="right">Max</th></tr></thead>
+              <tbody id="suspBody"></tbody>
+            </table>
+          </div>
+          <p class="small muted" id="bottomOuts" style="margin:8px 0 0;"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Detected events</span></div>
         <div class="grid cols-4" id="eventsGrid"></div>
       </div>
 
     </div>
 
-    <footer class="foot">Per-session analysis</footer>
+    <footer class="foot">Session analysis · verdicts are provisional heuristics — argue in app/laps.py</footer>
   </main>
 
   <script src="/static/app.js"></script>
   <script>
   (function () {
     "use strict";
-    const { api, esc, fmt, fmtLapTime, fmtDuration, toG, barChart, routeChart } = window.FH;
-    window.FH.registerSW();
+    const FH = window.FH;
+    const { api, esc, fmt, fmtLapTime, fmtDuration, barChart, routeChart, toast } = FH;
+    FH.shell("analysis");
+    FH.registerSW();
 
-    let sessionId = window.FH.qs("session");
+    const CLASS_LETTER = ["D", "C", "B", "A", "S1", "S2", "X"];
+    let sessionId = FH.qs("session");
     let colourBy = "speed";
     let routeData = null;
 
     const msg = document.getElementById("msg");
     const content = document.getElementById("content");
+    const setText = (id, v) => { document.getElementById(id).textContent = v; };
 
-    function showMsg(text) { msg.textContent = text; msg.classList.remove("hidden"); content.classList.add("hidden"); }
+    function showMsg(text) {
+      msg.textContent = text;
+      msg.classList.remove("hidden");
+      content.classList.add("hidden");
+    }
 
     async function populateSessions() {
       const sel = document.getElementById("sessionSel");
@@ -158,119 +183,224 @@
         const data = await api("/api/sessions");
         const list = data.sessions || [];
         sel.innerHTML = "";
-        if (!list.length) { sel.innerHTML = '<option value="">No sessions</option>'; showMsg("No recorded sessions yet."); return; }
+        if (!list.length) { showMsg("No recorded sessions yet — drive with recording on, then come back."); return; }
         for (const s of list) {
           const o = document.createElement("option");
-          o.value = s.id; o.textContent = (s.name || ("Session " + s.id)) + "  ·  " + (s.car_class || "");
+          o.value = s.id;
+          o.textContent = (s.name || ("Session " + s.id));
           sel.appendChild(o);
         }
         if (!sessionId) sessionId = list[0].id;
         sel.value = sessionId;
       } catch (e) { showMsg("Failed to load sessions: " + e.message); }
-      sel.addEventListener("change", function () {
+      sel.addEventListener("change", () => {
         sessionId = sel.value;
         history.replaceState(null, "", "/analysis?session=" + sessionId);
-        loadAnalysis(); loadRoute();
+        loadAll();
       });
     }
 
-    function setText(id, v) { document.getElementById(id).textContent = v; }
+    function renderVerdicts(rep) {
+      const v = rep.verdicts || {};
+      const bal = v.balance || {};
+      const el = document.getElementById("vBalance");
+      const verdict = bal.verdict || "–";
+      el.textContent = verdict;
+      el.className = "headline " + (verdict === "understeer" ? "understeer" :
+        verdict === "oversteer" ? "oversteer" : verdict === "neutral" ? "neutral" : "");
+      const fa = bal.front_slip_angle_corner_avg || 0;
+      const ra = bal.rear_slip_angle_corner_avg || 0;
+      const mx = Math.max(fa, ra, 1);
+      document.getElementById("axleFront").style.width = (fa / mx * 100).toFixed(0) + "%";
+      document.getElementById("axleRear").style.width = (ra / mx * 100).toFixed(0) + "%";
+      setText("axleFrontV", fa.toFixed(2));
+      setText("axleRearV", ra.toFixed(2));
+      let why = "Understeer index " + fmt(bal.understeer_index, 3) +
+        " · slide time F " + fmt(bal.front_slide_time_s, 1) + "s / R " +
+        fmt(bal.rear_slide_time_s, 1) + "s (axle bars: mean slip vs grip limit while cornering)";
+      if (bal.caveat) why += " · ⚠ " + bal.caveat;
+      setText("vBalanceWhy", why);
 
-    function loadAnalysis() {
+      const t = v.tyre_temps || {};
+      const fr = t.front || {}, re = t.rear || {};
+      const both = fr.verdict === "in window" && re.verdict === "in window";
+      const headline = both ? "in the window"
+        : (fr.verdict !== "in window" ? "front " + fr.verdict : "rear " + re.verdict);
+      const tempsEl = document.getElementById("vTemps");
+      tempsEl.textContent = headline;
+      tempsEl.className = "headline " + (both ? "neutral" : "");
+      setText("tFront", fmt(fr.avg_c, 1) + " °C · " + (fr.verdict || "–"));
+      setText("tRear", fmt(re.avg_c, 1) + " °C · " + (re.verdict || "–"));
+      const w = t.window_c || [60, 105];
+      setText("vTempsWhy", "Working window " + w[0] + "–" + w[1] +
+        " °C · F−R delta " + fmt((fr.avg_c || 0) - (re.avg_c || 0), 1) +
+        " °C (negative = rears working harder)");
+
+      const s = rep.session || {};
+      const trac = s.traction || {};
+      const spins = trac.wheelspin_events || 0, locks = trac.brake_lock_events || 0;
+      const bo = s.suspension_bottom_out_events || 0;
+      const issues = [];
+      if (spins > 3) issues.push(spins + " wheelspin");
+      if (locks > 3) issues.push(locks + " brake locks");
+      if (bo > 0) issues.push(bo + " bottom-outs");
+      const trEl = document.getElementById("vTraction");
+      trEl.textContent = issues.length ? issues.join(" · ") : "clean";
+      trEl.className = "headline " + (issues.length ? "" : "neutral");
+      setText("vTractionWhy",
+        "Wheelspin " + spins + " · brake lock " + locks + " · bottom-out " + bo +
+        (s.balance && s.balance.pct_drifting > 5
+          ? " · drifting " + fmt(s.balance.pct_drifting, 0) + "% of session" : ""));
+    }
+
+    function renderLaps(rep) {
+      const card = document.getElementById("lapsCard");
+      const body = document.getElementById("lapsBody");
+      if (!rep.has_laps) {
+        card.classList.remove("hidden");
+        document.getElementById("lapsNote").textContent = "free roam — whole session as one stint";
+      } else {
+        document.getElementById("lapsNote").textContent = "";
+      }
+      const best = rep.best_lap_s;
+      body.innerHTML = (rep.laps || []).map((l) => {
+        const isBest = l.complete && l.time_s && best && Math.abs(l.time_s - best) < 1e-6;
+        return "<tr>" +
+          "<td>" + (l.lap != null ? l.lap + 1 : "stint") + (l.complete ? "" : " ·partial") + "</td>" +
+          '<td class="right' + (isBest ? " best" : "") + '">' + esc(fmtLapTime(l.time_s)) + "</td>" +
+          '<td class="right">' + fmt(l.speed.avg_kmh, 0) + "</td>" +
+          '<td class="right">' + fmt(l.speed.max_kmh, 0) + "</td>" +
+          '<td class="right">' + fmt(l.inputs.pct_full_throttle, 0) + "</td>" +
+          '<td class="right">' + fmt(l.inputs.pct_braking, 0) + "</td>" +
+          '<td class="right">' + (l.balance.understeer_index >= 0 ? "+" : "") + fmt(l.balance.understeer_index, 3) + "</td>" +
+          '<td class="right">' + (l.temp_fr_delta_c >= 0 ? "+" : "") + fmt(l.temp_fr_delta_c, 1) + "</td>" +
+          "</tr>";
+      }).join("");
+    }
+
+    function renderSession(rep, meta) {
+      setText("sessName", meta.name || ("Session " + sessionId));
+      const cls = CLASS_LETTER[meta.car_class] != null ? CLASS_LETTER[meta.car_class] : "";
+      setText("sessMeta", [
+        meta.car_ordinal != null ? "#" + meta.car_ordinal : "",
+        cls && meta.car_pi != null ? cls + " " + meta.car_pi : "",
+        meta.drivetrain != null ? ({0:"FWD",1:"RWD",2:"AWD"})[meta.drivetrain] || "" : ""
+      ].filter(Boolean).join(" · "));
+
+      const s = rep.session || {};
+      setText("pillFrames", (rep.laps || []).length + (rep.has_laps ? " laps" : " stint"));
+      setText("pillDur", fmtDuration(s.duration_s) + " · " + fmt((s.distance_m || 0) / 1000, 1) + " km");
+      setText("pillBest", "BEST " + fmtLapTime(rep.best_lap_s));
+
+      const g = s.gearing || {};
+      setText("shAvg", g.shift_rpm_avg != null ? fmt(g.shift_rpm_avg, 0) : "–");
+      setText("shCount", fmt(g.shift_count, 0));
+      setText("limiterPct", fmt(g.pct_on_limiter, 1));
+      setText("topGear", fmt(g.top_gear, 0));
+
+      const ty = s.tyres_c || {};
+      const bal = s.balance || {};
+      const slide = { FL: null, FR: null, RL: null, RR: null };
+      document.getElementById("tyreBody").innerHTML =
+        ["FL", "FR", "RL", "RR"].map((w) => {
+          const t = ty[w] || {};
+          const axleSlide = (w === "FL" || w === "FR") ? bal.front_slide_time_s : bal.rear_slide_time_s;
+          return "<tr><td>" + w + '</td><td class="right">' + fmt(t.avg, 1) +
+            '</td><td class="right">' + fmt(t.max, 1) +
+            '</td><td class="right">' + fmt(axleSlide, 1) + "</td></tr>";
+        }).join("");
+
+      const susp = s.suspension || {};
+      document.getElementById("suspBody").innerHTML =
+        ["FL", "FR", "RL", "RR"].map((w) => {
+          const sv = susp[w] || {};
+          return "<tr><td>" + w + '</td><td class="right">' + fmt(sv.avg, 2) +
+            '</td><td class="right">' + fmt(sv.max, 2) + "</td></tr>";
+        }).join("");
+      setText("bottomOuts",
+        (s.suspension_bottom_out_events || 0) + " bottom-out event(s) at ≥0.98 travel");
+
+      document.getElementById("notes").textContent = meta.notes || "";
+    }
+
+    function renderEvents(a) {
+      const ev = a.events || {};
+      const nice = {
+        wheelspin: "Wheelspin", brake_lock: "Brake lock",
+        oversteer_candidates: "Oversteer moments", understeer_candidates: "Understeer moments",
+        suspension_bottom_out: "Bottom-out", suspension_full_extension: "Full extension",
+        rear_slip_on_power: "Rear slip on power", front_slip_while_steering: "Front slip steering"
+      };
+      document.getElementById("eventsGrid").innerHTML = Object.keys(nice).map((k) =>
+        '<div class="stat"><span class="eyebrow">' + nice[k] + '</span><span class="v">' +
+        fmt(ev[k], 0) + "</span></div>"
+      ).join("");
+
+      const gu = a.gear_usage_s || {};
+      const keys = Object.keys(gu).sort((x, y) => Number(x) - Number(y));
+      barChart(document.getElementById("gearCanvas"),
+        { labels: keys, values: keys.map(k => gu[k]) }, { height: 170 });
+    }
+
+    async function loadAll() {
       if (!sessionId) return;
-      document.getElementById("csvLink").href = "/api/sessions/" + sessionId + "/download.csv";
-      api("/api/sessions/" + sessionId + "/analysis").then(function (a) {
-        if (a.empty || a.frames === 0) {
-          showMsg("This session has no frames to analyse.");
-          return;
-        }
-        msg.classList.add("hidden"); content.classList.remove("hidden");
-
-        const s = a.session || {};
-        setText("sessName", s.name || ("Session " + sessionId));
-        document.getElementById("title").textContent = (s.name || "Session") + " — Analysis";
-        setText("sessMeta", [
-          s.car_ordinal != null ? "#" + s.car_ordinal : "", s.car_class || "",
-          s.car_pi != null ? "PI " + s.car_pi : "", s.drivetrain || "",
-          s.cylinders != null ? s.cylinders + "cyl" : ""
-        ].filter(Boolean).join(" · "));
-        document.getElementById("notes").textContent = s.notes || "";
-        setText("pillFrames", fmt(a.frames, 0) + " frames");
-        setText("pillDur", fmtDuration(a.duration_s));
-
-        const sp = a.speed || {};
-        setText("spPeak", fmt(sp.peak_kmh, 1)); setText("spAvg", fmt(sp.avg_kmh, 1)); setText("spPeakMs", fmt(sp.peak_ms, 1));
-
-        const ac = a.acceleration || {};
-        setText("acLat", fmt(ac.max_lat_g, 2)); setText("acLon", fmt(ac.max_lon_accel_g, 2));
-        setText("acBrk", fmt(ac.max_lon_brake_g, 2)); setText("acLatMs", fmt(ac.max_lat_ms2, 1));
-
-        const inp = a.inputs || {};
-        setText("inThr", fmt(inp.pct_full_throttle, 1)); setText("inBrk", fmt(inp.pct_braking, 1)); setText("inCoast", fmt(inp.pct_coasting, 1));
-
-        const sh = a.shift_rpm || {};
-        setText("shCount", fmt(sh.count, 0)); setText("shAvg", fmt(sh.avg, 0)); setText("shMin", fmt(sh.min, 0)); setText("shMax", fmt(sh.max, 0));
-
-        const laps = a.laps || {};
-        setText("lapBest", fmtLapTime(laps.best_lap_s)); setText("lapCount", fmt(laps.lap_count, 0));
-
-        // gear usage bar chart
-        const gu = a.gear_usage_s || {};
-        const keys = Object.keys(gu).sort(function (x, y) { return Number(x) - Number(y); });
-        barChart(document.getElementById("gearCanvas"),
-          { labels: keys, values: keys.map(k => gu[k]) }, { color: "#37d67a", height: 170 });
-
-        // tyres table
-        const ty = a.tyres || {};
-        const body = document.getElementById("tyreBody");
-        body.innerHTML = ["FL", "FR", "RL", "RR"].map(function (p) {
-          const t = ty[p] || {};
-          return "<tr><td>" + p + "</td><td class='right'>" + fmt(t.temp_min, 0) +
-            "</td><td class='right'>" + fmt(t.temp_avg, 0) + "</td><td class='right'>" + fmt(t.temp_max, 0) +
-            "</td><td class='right'>" + fmt(t.time_over_combined_slip_1_s, 1) + "</td></tr>";
-        }).join("");
-
-        // events grid
-        const ev = a.events || {};
-        const nice = {
-          rear_slip_on_power: "Rear slip on power", front_slip_while_steering: "Front slip while steering",
-          suspension_bottom_out: "Suspension bottom-out", suspension_full_extension: "Suspension full extension",
-          brake_lock: "Brake lock", wheelspin: "Wheelspin",
-          oversteer_candidates: "Oversteer candidates", understeer_candidates: "Understeer candidates"
-        };
-        document.getElementById("eventsGrid").innerHTML = Object.keys(nice).map(function (k) {
-          return "<div class='card tight center'><div class='readout' style='align-items:center'>" +
-            "<span class='label'>" + nice[k] + "</span><span class='value' style='font-size:26px'>" +
-            fmt(ev[k], 0) + "</span></div></div>";
-        }).join("");
-      }).catch(function (e) { showMsg("Failed to load analysis: " + e.message); });
+      document.getElementById("btnCopyAI").dataset.id = sessionId;
+      document.getElementById("lnkMd").href = "/api/sessions/" + sessionId + "/tuning.md?download=1";
+      document.getElementById("lnkLapsCsv").href = "/api/sessions/" + sessionId + "/laps.csv";
+      document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
+      try {
+        const [rep, a] = await Promise.all([
+          api("/api/sessions/" + sessionId + "/laps"),
+          api("/api/sessions/" + sessionId + "/analysis")
+        ]);
+        if (!rep.session) { showMsg("This session has no frames to analyse."); return; }
+        msg.classList.add("hidden");
+        content.classList.remove("hidden");
+        renderSession(rep, rep.session_meta || {});
+        renderVerdicts(rep);
+        renderLaps(rep);
+        renderEvents(a);
+        loadRoute();
+      } catch (e) { showMsg("Failed to load analysis: " + e.message); }
     }
 
     function loadRoute() {
-      if (!sessionId) return;
-      api("/api/sessions/" + sessionId + "/route?colour_by=" + colourBy).then(function (r) {
-        routeData = r;
-        document.getElementById("routeLabel").textContent = "(" + (r.colour_by || colourBy) + ")";
-        drawRoute();
-      }).catch(function () { routeData = null; drawRoute(); });
+      api("/api/sessions/" + sessionId + "/route?colour_by=" + colourBy)
+        .then((r) => { routeData = r; drawRoute(); })
+        .catch(() => { routeData = null; drawRoute(); });
+      document.getElementById("routeLabel").textContent = "coloured by " + colourBy.replace("_", " ");
     }
     function drawRoute() {
-      routeChart(document.getElementById("routeCanvas"), routeData || { x: [], z: [], c: [] }, { height: 340 });
+      routeChart(document.getElementById("routeCanvas"),
+        routeData || { x: [], z: [], c: [] }, { height: 320 });
     }
 
-    document.querySelectorAll("[data-colour]").forEach(function (b) {
-      b.addEventListener("click", function () {
+    document.querySelectorAll("[data-colour]").forEach((b) => {
+      b.addEventListener("click", () => {
         document.querySelectorAll("[data-colour]").forEach(x => x.classList.remove("on"));
         b.classList.add("on");
         colourBy = b.getAttribute("data-colour");
         loadRoute();
       });
     });
-    window.addEventListener("resize", function () { drawRoute(); });
+
+    document.getElementById("btnCopyAI").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const md = await api("/api/sessions/" + sessionId + "/tuning.md");
+        const ok = await FH.copyText(md);
+        toast(ok ? "Tuning report copied — paste it into Claude or ChatGPT"
+                 : "Copy failed — use the .md download instead");
+      } catch (err) { toast("Export failed: " + err.message); }
+      btn.disabled = false;
+    });
+
+    window.addEventListener("resize", drawRoute);
 
     (async function () {
       await populateSessions();
-      if (sessionId) { loadAnalysis(); loadRoute(); }
+      if (sessionId) loadAll();
     })();
   })();
   </script>

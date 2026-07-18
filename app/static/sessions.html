@@ -4,97 +4,105 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FH6 Telemetry — Sessions</title>
-  <meta name="theme-color" content="#0d1117" />
+  <meta name="theme-color" content="#16130F" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <nav class="nav">
-    <span class="brand"><span class="fh">FH6</span> Telemetry</span>
-    <a class="navlink" href="/">Live</a>
-    <a class="navlink" href="/sessions">Sessions</a>
-    <a class="navlink" href="/analysis">Analysis</a>
-    <a class="navlink" href="/compare">Compare</a>
-    <a class="navlink" href="/debug">Debug</a>
-  </nav>
-
   <main class="page">
     <div class="spread" style="margin-bottom:12px;">
-      <h1>Sessions</h1>
-      <button id="btnRefresh" class="btn small">Refresh</button>
+      <h1 style="margin:0;">Sessions</h1>
+      <div class="btnrow">
+        <button id="btnCompare" class="btn small" disabled>Compare (0/2)</button>
+        <button id="btnRefresh" class="btn small ghost">Refresh</button>
+      </div>
     </div>
 
-    <div id="empty" class="notice hidden">No recorded sessions yet. Start a recording from the Live dashboard.</div>
-
-    <div class="tablewrap card tight">
-      <table class="data">
-        <thead>
-          <tr>
-            <th>Name</th><th>Date</th><th class="right">Ordinal</th><th>Class</th>
-            <th class="right">PI</th><th>Drive</th><th class="right">Cyl</th>
-            <th class="right">Best Lap</th><th class="right">Frames</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="rows"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
-      </table>
+    <div id="empty" class="notice hidden">
+      No recorded sessions yet. Sessions start automatically when you drive
+      (or press <b>● Record</b> on the Live page).
     </div>
 
-    <p class="muted" style="font-size:12px;margin-top:14px;">
-      Tip: use the checkboxes to pick two sessions, then click <b>Compare selected</b>.
-    </p>
-    <div class="btnrow"><button id="btnCompare" class="btn" disabled>Compare selected</button></div>
+    <div id="list" class="session-list" aria-live="polite"></div>
+
+    <footer class="foot">Recordings stay on this machine · CSV / Markdown export</footer>
   </main>
 
   <script src="/static/app.js"></script>
   <script>
   (function () {
     "use strict";
-    const { api, esc, fmt, fmtLapTime, fmtDate } = window.FH;
-    window.FH.registerSW();
+    const FH = window.FH;
+    const { api, esc, fmt, fmtLapTime, fmtDate, fmtDuration, toast } = FH;
+    FH.shell("sessions");
+    FH.registerSW();
 
-    const rowsEl = document.getElementById("rows");
+    const CLASS_LETTER = ["D", "C", "B", "A", "S1", "S2", "X"];
+    const DRIVE = { 0: "FWD", 1: "RWD", 2: "AWD" };
+    const listEl = document.getElementById("list");
     const compareSel = new Set();
 
-    function actions(s) {
-      return [
-        '<div class="btnrow">',
-        '<a class="btn small primary" href="/analysis?session=' + s.id + '">Analysis</a>',
-        '<a class="btn small" href="/api/sessions/' + s.id + '/download.csv">CSV</a>',
-        '<button class="btn small" data-act="rename" data-id="' + s.id + '">Rename</button>',
-        '<button class="btn small" data-act="notes" data-id="' + s.id + '">Notes</button>',
-        '<button class="btn small danger" data-act="delete" data-id="' + s.id + '">Delete</button>',
-        '</div>'
-      ].join("");
+    function chips(s) {
+      const out = [];
+      if (s.car_pi != null) {
+        const cls = CLASS_LETTER[s.car_class] != null ? CLASS_LETTER[s.car_class] : "?";
+        out.push('<span class="pill amber">' + esc(cls + " " + s.car_pi) + "</span>");
+      }
+      if (s.drivetrain != null) out.push('<span class="pill">' + esc(DRIVE[s.drivetrain] || s.drivetrain) + "</span>");
+      if (s.car_ordinal != null) out.push('<span class="pill">#' + esc(s.car_ordinal) + "</span>");
+      if (s.ended_at == null && s.frame_count === 0) out.push('<span class="pill rec">RECORDING</span>');
+      return out.join("");
     }
 
-    function rowHTML(s) {
-      const checked = compareSel.has(s.id) ? " checked" : "";
-      return "<tr data-row='" + s.id + "'>" +
-        "<td><label class='nowrap'><input type='checkbox' data-cmp='" + s.id + "'" + checked + "> " +
-          esc(s.name || ("Session " + s.id)) + "</label></td>" +
-        "<td class='nowrap'>" + esc(fmtDate(s.created_at)) + "</td>" +
-        "<td class='right'>" + esc(s.car_ordinal != null ? s.car_ordinal : "–") + "</td>" +
-        "<td>" + esc(s.car_class || "–") + "</td>" +
-        "<td class='right'>" + esc(s.car_pi != null ? s.car_pi : "–") + "</td>" +
-        "<td>" + esc(s.drivetrain || "–") + "</td>" +
-        "<td class='right'>" + esc(s.cylinders != null ? s.cylinders : "–") + "</td>" +
-        "<td class='right accent'>" + esc(fmtLapTime(s.best_lap)) + "</td>" +
-        "<td class='right'>" + esc(fmt(s.frame_count, 0)) + "</td>" +
-        "<td>" + actions(s) + "</td>" +
-        "</tr>";
+    function duration(s) {
+      if (!s.created_at || !s.ended_at) return null;
+      return (new Date(s.ended_at) - new Date(s.created_at)) / 1000;
+    }
+
+    function card(s) {
+      const dur = duration(s);
+      return '<article class="card session-card" data-id="' + s.id + '">' +
+        '<div class="title-row">' +
+          '<label class="nowrap" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+            '<input type="checkbox" data-cmp="' + s.id + '"' + (compareSel.has(s.id) ? " checked" : "") + ">" +
+            '<span class="name">' + esc(s.name || ("Session " + s.id)) + "</span></label>" +
+          '<span class="when">' + esc(fmtDate(s.created_at)) + "</span>" +
+        "</div>" +
+        '<div class="chips">' + chips(s) + "</div>" +
+        '<div class="lapline">' +
+          '<span>BEST <b>' + esc(fmtLapTime(s.best_lap)) + "</b></span>" +
+          (dur ? "<span>" + esc(fmtDuration(dur)) + "</span>" : "") +
+          "<span>" + esc(fmt(s.frame_count, 0)) + " frames</span>" +
+        "</div>" +
+        (s.notes ? '<div class="small muted">' + esc(s.notes) + "</div>" : "") +
+        '<div class="actions">' +
+          '<a class="btn small primary" href="/analysis?session=' + s.id + '">Analysis</a>' +
+          '<details class="exporter"><summary class="btn small">Export ▾</summary>' +
+            '<div class="menu">' +
+              '<div class="hint">FOR AI TUNING</div>' +
+              '<button data-act="copyai" data-id="' + s.id + '">Copy tuning report (paste into Claude/ChatGPT)</button>' +
+              '<a href="/api/sessions/' + s.id + '/tuning.md?download=1">Download tuning report (.md)</a>' +
+              '<div class="hint">DATA</div>' +
+              '<a href="/api/sessions/' + s.id + '/laps.csv">Per-lap summary (.csv)</a>' +
+              '<a href="/api/sessions/' + s.id + '/download.csv">Raw frames (.csv)</a>' +
+            "</div></details>" +
+          '<button class="btn small ghost" data-act="rename" data-id="' + s.id + '">Rename</button>' +
+          '<button class="btn small ghost" data-act="notes" data-id="' + s.id + '">Notes</button>' +
+          '<button class="btn small ghost" data-act="delete" data-id="' + s.id + '" style="color:var(--over)">Delete</button>' +
+        "</div>" +
+      "</article>";
     }
 
     async function load() {
-      rowsEl.innerHTML = '<tr><td colspan="10" class="muted">Loading…</td></tr>';
+      listEl.innerHTML = '<div class="notice">Loading…</div>';
       try {
         const data = await api("/api/sessions");
         const list = data.sessions || [];
         document.getElementById("empty").classList.toggle("hidden", list.length > 0);
-        if (!list.length) { rowsEl.innerHTML = ""; return; }
-        rowsEl.innerHTML = list.map(rowHTML).join("");
+        listEl.innerHTML = list.map(card).join("");
       } catch (e) {
-        rowsEl.innerHTML = '<tr><td colspan="10" class="muted">Error: ' + esc(e.message) + '</td></tr>';
+        listEl.innerHTML = '<div class="notice">Could not load sessions: ' + esc(e.message) + "</div>";
       }
       updateCompareBtn();
     }
@@ -102,52 +110,69 @@
     function updateCompareBtn() {
       const btn = document.getElementById("btnCompare");
       btn.disabled = compareSel.size !== 2;
-      btn.textContent = "Compare selected (" + compareSel.size + "/2)";
+      btn.textContent = "Compare (" + compareSel.size + "/2)";
     }
 
-    rowsEl.addEventListener("change", function (e) {
+    listEl.addEventListener("change", (e) => {
       const cb = e.target.closest("input[data-cmp]");
       if (!cb) return;
       const id = Number(cb.getAttribute("data-cmp"));
       if (cb.checked) {
-        if (compareSel.size >= 2) { cb.checked = false; alert("Pick at most two sessions."); return; }
+        if (compareSel.size >= 2) { cb.checked = false; toast("Pick at most two sessions"); return; }
         compareSel.add(id);
       } else compareSel.delete(id);
       updateCompareBtn();
     });
 
-    rowsEl.addEventListener("click", async function (e) {
+    listEl.addEventListener("click", async (e) => {
       const btn = e.target.closest("button[data-act]");
       if (!btn) return;
       const id = Number(btn.getAttribute("data-id"));
       const act = btn.getAttribute("data-act");
       try {
-        if (act === "rename") {
+        if (act === "copyai") {
+          btn.disabled = true;
+          const md = await api("/api/sessions/" + id + "/tuning.md");
+          const ok = await FH.copyText(md);
+          toast(ok ? "Tuning report copied — paste it into Claude or ChatGPT"
+                   : "Copy failed — use Download instead");
+          btn.disabled = false;
+          btn.closest("details").removeAttribute("open");
+        } else if (act === "rename") {
           const name = prompt("New session name:");
           if (name === null) return;
-          await api("/api/sessions/" + id, { method: "PATCH", json: { name: name } });
+          await api("/api/sessions/" + id, { method: "PATCH", json: { name } });
           load();
         } else if (act === "notes") {
           const cur = await api("/api/sessions/" + id);
-          const notes = prompt("Notes:", cur.notes || "");
+          const notes = prompt("Notes (car, track, tune, what you were testing):", cur.notes || "");
           if (notes === null) return;
-          await api("/api/sessions/" + id, { method: "PATCH", json: { notes: notes } });
-          alert("Notes saved.");
+          await api("/api/sessions/" + id, { method: "PATCH", json: { notes } });
+          toast("Notes saved");
+          load();
         } else if (act === "delete") {
-          if (!confirm("Delete this session permanently? This cannot be undone.")) return;
+          if (!confirm("Delete this session and its raw file permanently?")) return;
           await api("/api/sessions/" + id, { method: "DELETE" });
           compareSel.delete(id);
+          toast("Session deleted");
           load();
         }
-      } catch (err) { alert("Action failed: " + err.message); }
+      } catch (err) { toast("Action failed: " + err.message); }
     });
 
-    document.getElementById("btnCompare").addEventListener("click", function () {
+    document.getElementById("btnCompare").addEventListener("click", () => {
       if (compareSel.size !== 2) return;
       const ids = Array.from(compareSel);
       location.href = "/compare?a=" + ids[0] + "&b=" + ids[1];
     });
     document.getElementById("btnRefresh").addEventListener("click", load);
+
+    // Close any open export menu when tapping elsewhere.
+    document.addEventListener("click", (e) => {
+      document.querySelectorAll("details.exporter[open]").forEach((d) => {
+        if (!d.contains(e.target)) d.removeAttribute("open");
+      });
+    });
 
     load();
   })();

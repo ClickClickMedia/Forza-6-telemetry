@@ -4,65 +4,66 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FH6 Telemetry — Debug</title>
-  <meta name="theme-color" content="#0d1117" />
+  <meta name="theme-color" content="#16130F" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <nav class="nav">
-    <span class="brand"><span class="fh">FH6</span> Telemetry</span>
-    <a class="navlink" href="/">Live</a>
-    <a class="navlink" href="/sessions">Sessions</a>
-    <a class="navlink" href="/analysis">Analysis</a>
-    <a class="navlink" href="/compare">Compare</a>
-    <a class="navlink" href="/debug">Debug</a>
-  </nav>
-
   <main class="page">
-    <h1>Packet Debug</h1>
     <div class="spread" style="margin-bottom:12px;">
+      <h1 style="margin:0;">Packet debug</h1>
       <div class="btnrow">
         <span id="haveDot" class="dot"></span>
-        <span id="haveText" class="muted">No packet yet</span>
-      </div>
-      <div class="btnrow">
+        <span id="haveText" class="muted small">No packet yet</span>
         <button id="btnPause" class="btn small">Pause</button>
-        <button id="btnSpec" class="btn small">Show Spec</button>
+        <button id="btnSpec" class="btn small ghost">Spec</button>
       </div>
     </div>
 
-    <div class="card tight" style="margin-bottom:12px;">
-      <div class="spread">
-        <div class="readout"><span class="label">Expected packet size</span><span class="value" style="font-size:24px" id="expectSize">324</span></div>
-        <div class="readout"><span class="label">Received size</span><span class="value" style="font-size:24px" id="recvSize">–</span></div>
-        <div class="readout"><span class="label">Format</span><span class="value mono" style="font-size:18px" id="fmt">–</span></div>
-        <div class="readout"><span class="label">Match</span><span class="value" style="font-size:24px" id="match">–</span></div>
+    <div class="notice" style="margin-bottom:10px;">
+      This page is the community validation tool: it shows the live byte
+      offset and decoded value of every field. The layout is pinned by a
+      physics cross-check — <b>Speed must equal |VelocityX,Y,Z|</b>. If they
+      disagree on your setup, screenshot this page and open an issue.
+    </div>
+
+    <div class="card tight" style="margin-bottom:10px;">
+      <div class="kv">
+        <div class="stat"><span class="eyebrow">Expected size</span><span class="v" id="expectSize">324</span></div>
+        <div class="stat"><span class="eyebrow">Received size</span><span class="v" id="recvSize">–</span></div>
+        <div class="stat"><span class="eyebrow">Match</span><span class="v" id="match">–</span></div>
+        <div class="stat"><span class="eyebrow">Speed vs |V|</span><span class="v" id="physCheck">–</span></div>
       </div>
     </div>
 
-    <div id="specCard" class="card hidden" style="margin-bottom:12px;">
-      <div class="spread"><div class="section-title">Spec / field offsets</div><button id="btnSpecHide" class="btn small ghost">Hide</button></div>
+    <div id="specCard" class="card hidden" style="margin-bottom:10px;">
+      <div class="card-head"><span class="eyebrow">Spec / field offsets</span>
+        <button id="btnSpecHide" class="btn small ghost">Hide</button></div>
       <div class="tablewrap"><table class="data" id="specTable"></table></div>
     </div>
 
     <div class="card">
-      <div class="section-title">Fields (offset · name · type · value)</div>
+      <div class="card-head"><span class="eyebrow">Fields</span></div>
       <div class="tablewrap">
-        <table class="data" id="fieldsTable">
-          <thead><tr><th>Offset</th><th>Name</th><th>Type</th><th>Value</th></tr></thead>
+        <table class="data">
+          <thead><tr><th>Offset</th><th>Name</th><th>Type</th><th class="right">Value</th></tr></thead>
           <tbody id="fieldsBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+
+    <footer class="foot">Field table lives in app/packet.py · offsets pinned by unit tests</footer>
   </main>
 
   <script src="/static/app.js"></script>
   <script>
   (function () {
     "use strict";
-    const { api, esc, fmt } = window.FH;
-    window.FH.registerSW();
+    const FH = window.FH;
+    const { api, esc } = FH;
+    FH.shell("debug");
+    FH.registerSW();
 
     const body = document.getElementById("fieldsBody");
     const haveDot = document.getElementById("haveDot");
@@ -76,25 +77,37 @@
 
       document.getElementById("expectSize").textContent = d.packet_size != null ? d.packet_size : 324;
       document.getElementById("recvSize").textContent = d.received_size != null ? d.received_size : "–";
-      document.getElementById("fmt").textContent = d.format || "–";
       const ok = d.received_size != null && d.received_size === d.packet_size;
       const m = document.getElementById("match");
-      m.textContent = d.received_size == null ? "–" : (ok ? "✓ OK" : "✗ MISMATCH");
-      m.style.color = d.received_size == null ? "" : (ok ? "var(--accent)" : "var(--danger)");
+      m.textContent = d.received_size == null ? "–" : (ok ? "✓ OK" : "✗ SIZE");
+      m.style.color = d.received_size == null ? "" : (ok ? "var(--optimal)" : "var(--over)");
 
       const fields = d.fields || [];
+      // Physics cross-check: dash Speed vs sled |Velocity|.
+      const val = {};
+      for (const f of fields) val[f.name] = f.value;
+      const phys = document.getElementById("physCheck");
+      if (val.Speed != null && val.VelocityX != null) {
+        const vmag = Math.hypot(val.VelocityX, val.VelocityY || 0, val.VelocityZ || 0);
+        const err = Math.abs((val.Speed || 0) - vmag);
+        const good = vmag < 1 ? err < 0.5 : err < 0.5;
+        phys.textContent = good ? "✓ " + err.toFixed(3) : "✗ " + err.toFixed(1);
+        phys.style.color = good ? "var(--optimal)" : "var(--over)";
+      } else {
+        phys.textContent = "–";
+        phys.style.color = "";
+      }
+
       if (!fields.length) {
         body.innerHTML = '<tr><td colspan="4" class="muted">No fields</td></tr>';
         return;
       }
-      const rows = fields.map(function (f) {
-        let val = f.value;
-        if (Array.isArray(val)) val = "[" + val.map(v => typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(3)) : v).join(", ") + "]";
-        else if (typeof val === "number" && !Number.isInteger(val)) val = val.toFixed(4);
+      body.innerHTML = fields.map((f) => {
+        let v = f.value;
+        if (typeof v === "number" && !Number.isInteger(v)) v = v.toFixed(4);
         return "<tr><td>" + esc(f.offset) + "</td><td>" + esc(f.name) +
-               "</td><td class='muted'>" + esc(f.type) + "</td><td>" + esc(val) + "</td></tr>";
-      });
-      body.innerHTML = rows.join("");
+               "</td><td class='muted'>" + esc(f.type) + "</td><td class='right'>" + esc(v) + "</td></tr>";
+      }).join("");
     }
 
     async function tick() {
@@ -111,22 +124,21 @@
         const s = await api("/api/debug/spec");
         const offsets = s.field_offsets || {};
         const names = s.field_names || Object.keys(offsets);
-        const rows = names.map(function (n) {
-          return "<tr><td>" + esc(offsets[n] != null ? offsets[n] : "") + "</td><td>" + esc(n) + "</td></tr>";
-        });
         document.getElementById("specTable").innerHTML =
-          "<thead><tr><th>Offset</th><th>Field</th></tr></thead><tbody>" + rows.join("") +
+          "<thead><tr><th>Offset</th><th>Field</th></tr></thead><tbody>" +
+          names.map((n) => "<tr><td>" + esc(offsets[n] != null ? offsets[n] : "") +
+            "</td><td>" + esc(n) + "</td></tr>").join("") +
           "</tbody>";
         document.getElementById("specCard").classList.remove("hidden");
-      } catch (e) { alert("Spec failed: " + e.message); }
+      } catch (e) { FH.toast("Spec failed: " + e.message); }
     }
 
     document.getElementById("btnSpec").addEventListener("click", showSpec);
-    document.getElementById("btnSpecHide").addEventListener("click", function () {
+    document.getElementById("btnSpecHide").addEventListener("click", () => {
       document.getElementById("specCard").classList.add("hidden");
     });
     const btnPause = document.getElementById("btnPause");
-    btnPause.addEventListener("click", function () {
+    btnPause.addEventListener("click", () => {
       paused = !paused;
       btnPause.textContent = paused ? "Resume" : "Pause";
       btnPause.classList.toggle("on", paused);

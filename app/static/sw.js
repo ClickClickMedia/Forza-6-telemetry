@@ -3,7 +3,7 @@
    Caches the static app shell for offline load. NEVER caches API or
    WebSocket traffic (those are network-only / passthrough).
    ========================================================================= */
-const CACHE = "fh6-shell-v1";
+const CACHE = "fh6-shell-v2";
 
 // App shell: pages + static assets. Kept minimal and versioned.
 const SHELL = [

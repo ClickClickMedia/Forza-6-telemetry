@@ -4,32 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FH6 Telemetry — Compare</title>
-  <meta name="theme-color" content="#0d1117" />
+  <meta name="theme-color" content="#16130F" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <nav class="nav">
-    <span class="brand"><span class="fh">FH6</span> Telemetry</span>
-    <a class="navlink" href="/">Live</a>
-    <a class="navlink" href="/sessions">Sessions</a>
-    <a class="navlink" href="/analysis">Analysis</a>
-    <a class="navlink" href="/compare">Compare</a>
-    <a class="navlink" href="/debug">Debug</a>
-  </nav>
-
   <main class="page">
-    <h1 style="margin-bottom:12px;">Compare Sessions</h1>
+    <h1>Compare</h1>
 
-    <div class="card" style="margin-bottom:12px;">
+    <div class="card" style="margin-bottom:10px;">
       <div class="grid cols-4" style="align-items:end;">
         <label class="field">
-          <span>Session A <span class="swatch" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#37d67a;"></span></span>
+          <span>Session A <span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--amber);"></span></span>
           <select id="selA"></select>
         </label>
         <label class="field">
-          <span>Session B <span class="swatch" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ff8a1e;"></span></span>
+          <span>Session B <span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--cold);"></span></span>
           <select id="selB"></select>
         </label>
         <label class="field">
@@ -39,38 +30,35 @@
             <option value="rear_slip">Rear slip</option>
           </select>
         </label>
-        <div class="btnrow"><button id="btnCompare" class="btn primary">Compare</button></div>
+        <div class="btnrow"><button id="btnCompare" class="btn primary" style="width:100%;">Compare</button></div>
       </div>
     </div>
 
     <div id="msg" class="notice">Pick two sessions and press Compare.</div>
 
     <div id="result" class="hidden">
-      <!-- Summary delta -->
-      <div class="card" style="margin-bottom:12px;">
-        <div class="section-title">Summary</div>
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head"><span class="eyebrow">Summary</span></div>
         <div class="tablewrap">
           <table class="data">
-            <thead><tr><th>Metric</th><th class="right" style="color:#37d67a">A</th><th class="right" style="color:#ff8a1e">B</th><th class="right">Δ (B − A)</th></tr></thead>
+            <thead><tr><th>Metric</th><th class="right" style="color:var(--amber)">A</th><th class="right" style="color:var(--cold)">B</th><th class="right">Δ (B − A)</th></tr></thead>
             <tbody id="sumBody"></tbody>
           </table>
         </div>
         <div class="legend" style="margin-top:8px;">
-          <span id="metaA" class="muted"></span><span id="metaB" class="muted"></span>
+          <span id="metaA"></span><span id="metaB"></span>
         </div>
       </div>
 
-      <!-- Route overlay -->
-      <div class="card" style="margin-bottom:12px;">
-        <div class="section-title">Route overlay <span id="routeBy" class="muted"></span></div>
-        <canvas id="routeCanvas" class="chart" style="height:360px;"></canvas>
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head"><span class="eyebrow">Route overlay</span><span class="eyebrow" id="routeBy"></span></div>
+        <canvas id="routeCanvas" class="chart" style="height:340px;"></canvas>
         <div class="legend" style="margin-top:8px;">
-          <span><span class="swatch" style="background:#37d67a"></span>Session A</span>
-          <span><span class="swatch" style="background:#ff8a1e"></span>Session B</span>
+          <span><span class="swatch" style="background:var(--amber)"></span>Session A</span>
+          <span><span class="swatch" style="background:var(--cold)"></span>Session B</span>
         </div>
       </div>
 
-      <!-- Channel overlays -->
       <div class="grid cols-2" id="charts"></div>
     </div>
 
@@ -81,19 +69,23 @@
   <script>
   (function () {
     "use strict";
-    const { api, esc, fmt, fmtDuration, lineChart, routeChart } = window.FH;
-    window.FH.registerSW();
+    const FH = window.FH;
+    const { api, esc, fmt, lineChart, routeChart } = FH;
+    FH.shell("compare");
+    FH.registerSW();
 
-    const COL_A = "#37d67a", COL_B = "#ff8a1e";
+    let COL_A = "#FFAE00", COL_B = "#4FA8FF";
+    try { const P = FH.palette(); COL_A = P.amber; COL_B = P.cold; } catch (e) {}
     let lastData = null;
 
     const CHANNELS = [
       { key: "speed_kmh", title: "Speed (km/h)" },
       { key: "throttle", title: "Throttle (%)" },
       { key: "brake", title: "Brake (%)" },
-      { key: "steer", title: "Steering (-1..1)" },
+      { key: "steer", title: "Steering (−1..1)" },
       { key: "gear", title: "Gear" },
       { key: "rear_slip", title: "Rear slip" },
+      { key: "front_slip", title: "Front slip" },
       { key: "susp_travel", title: "Suspension travel" }
     ];
 
@@ -103,10 +95,9 @@
         const list = data.sessions || [];
         const selA = document.getElementById("selA"), selB = document.getElementById("selB");
         const opts = list.map(s => '<option value="' + s.id + '">' +
-          esc((s.name || ("Session " + s.id)) + "  ·  " + (s.car_class || "")) + '</option>').join("");
+          esc(s.name || ("Session " + s.id)) + "</option>").join("");
         selA.innerHTML = opts; selB.innerHTML = opts;
-        // preselect from query or first two
-        const a = window.FH.qs("a"), b = window.FH.qs("b");
+        const a = FH.qs("a"), b = FH.qs("b");
         if (a) selA.value = a; if (b) selB.value = b;
         if (!a && list.length) selA.value = list[0].id;
         if (!b && list.length > 1) selB.value = list[1].id;
@@ -116,33 +107,33 @@
       }
     }
 
-    function sumRow(label, aV, bV, dV, dec) {
-      const d = dV;
-      const dCol = d > 0 ? "#37d67a" : d < 0 ? "#ff4d4f" : "var(--text-dim)";
-      const dTxt = (d > 0 ? "+" : "") + fmt(d, dec);
+    function sumRow(label, aV, bV, dV, dec, lowerIsBetter) {
+      let col = "var(--ink-dim)";
+      if (isFinite(dV) && dV !== 0) {
+        const improved = lowerIsBetter ? dV < 0 : dV > 0;
+        col = improved ? "var(--optimal)" : "var(--over)";
+      }
+      const dTxt = (dV > 0 ? "+" : "") + fmt(dV, dec);
       return "<tr><td>" + label + "</td><td class='right'>" + fmt(aV, dec) +
         "</td><td class='right'>" + fmt(bV, dec) +
-        "</td><td class='right' style='color:" + dCol + "'>" + dTxt + "</td></tr>";
+        "</td><td class='right' style='color:" + col + "'>" + dTxt + "</td></tr>";
     }
 
     function renderSummary(d) {
       const sa = d.a.summary || {}, sb = d.b.summary || {}, dd = d.delta_b_minus_a || {};
-      const body = document.getElementById("sumBody");
-      body.innerHTML =
-        sumRow("Frames", sa.frames, sb.frames, dd.frames, 0) +
-        sumRow("Run time (s)", sa.run_time_s, sb.run_time_s, dd.run_time_s, 1) +
-        sumRow("Peak speed (km/h)", sa.peak_speed_kmh, sb.peak_speed_kmh, dd.peak_speed_kmh, 1) +
-        sumRow("Avg speed (km/h)", sa.avg_speed_kmh, sb.avg_speed_kmh, dd.avg_speed_kmh, 1) +
-        sumRow("Max lat (g)", sa.max_lat_g, sb.max_lat_g, dd.max_lat_g, 2) +
-        sumRow("Max accel (g)", sa.max_lon_accel_g, sb.max_lon_accel_g, dd.max_lon_accel_g, 2) +
-        sumRow("Max brake (g)", sa.max_lon_brake_g, sb.max_lon_brake_g, dd.max_lon_brake_g, 2);
-
-      document.getElementById("metaA").textContent = "A: " + metaStr(d.a.meta);
-      document.getElementById("metaB").textContent = "B: " + metaStr(d.b.meta);
+      document.getElementById("sumBody").innerHTML =
+        sumRow("Run time (s)", sa.run_time_s, sb.run_time_s, dd.run_time_s, 1, true) +
+        sumRow("Peak speed (km/h)", sa.peak_speed_kmh, sb.peak_speed_kmh, dd.peak_speed_kmh, 1, false) +
+        sumRow("Avg speed (km/h)", sa.avg_speed_kmh, sb.avg_speed_kmh, dd.avg_speed_kmh, 1, false) +
+        sumRow("Max lat (g)", sa.max_lat_g, sb.max_lat_g, dd.max_lat_g, 2, false) +
+        sumRow("Max accel (g)", sa.max_lon_accel_g, sb.max_lon_accel_g, dd.max_lon_accel_g, 2, false) +
+        sumRow("Max brake (g)", sa.max_lon_brake_g, sb.max_lon_brake_g, dd.max_lon_brake_g, 2, true);
+      document.getElementById("metaA").textContent = "A · " + metaStr(d.a.meta);
+      document.getElementById("metaB").textContent = "B · " + metaStr(d.b.meta);
     }
     function metaStr(m) {
       if (!m) return "–";
-      return [m.name, m.car_class, m.car_pi != null ? "PI " + m.car_pi : "", m.drivetrain]
+      return [m.name, m.car_pi != null ? "PI " + m.car_pi : "", m.drivetrain]
         .filter(Boolean).join(" · ") || ("id " + (m.id != null ? m.id : "?"));
     }
 
@@ -150,7 +141,7 @@
       const wrap = document.getElementById("charts");
       wrap.innerHTML = "";
       const ta = d.a.traces || {}, tb = d.b.traces || {};
-      CHANNELS.forEach(function (ch) {
+      CHANNELS.forEach((ch) => {
         const card = document.createElement("div");
         card.className = "card";
         const cv = document.createElement("canvas");
@@ -169,10 +160,10 @@
 
     function renderRoute(d) {
       const by = d.colour_by || document.getElementById("colourBy").value;
-      document.getElementById("routeBy").textContent = "(A vs B; channel: " + by + ")";
+      document.getElementById("routeBy").textContent = "channel: " + by;
       const ra = d.a.route || { x: [], z: [] }, rb = d.b.route || { x: [], z: [] };
       routeChart(document.getElementById("routeCanvas"), null, {
-        height: 360,
+        height: 340,
         multi: [
           { x: ra.x || [], z: ra.z || [], color: COL_A },
           { x: rb.x || [], z: rb.z || [], color: COL_B }
@@ -190,7 +181,7 @@
       const a = document.getElementById("selA").value;
       const b = document.getElementById("selB").value;
       const by = document.getElementById("colourBy").value;
-      if (!a || !b) { alert("Pick two sessions."); return; }
+      if (!a || !b) return;
       const msg = document.getElementById("msg");
       msg.textContent = "Comparing…"; msg.classList.remove("hidden");
       document.getElementById("result").classList.add("hidden");
@@ -202,13 +193,13 @@
         msg.classList.add("hidden");
         document.getElementById("result").classList.remove("hidden");
       } catch (e) {
-        msg.textContent = "Compare failed: " + e.message; msg.classList.remove("hidden");
+        msg.textContent = "Compare failed: " + e.message;
+        msg.classList.remove("hidden");
       }
     }
 
     document.getElementById("btnCompare").addEventListener("click", runCompare);
     window.addEventListener("resize", redraw);
-
     populate();
   })();
   </script>
