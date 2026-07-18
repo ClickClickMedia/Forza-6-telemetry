@@ -11,26 +11,38 @@ Packet families and their exact sizes:
 
     * Forza Motorsport 7 "Sled"            : 232 bytes
     * Forza Motorsport 7 "Dash" (V2)       : 311 bytes
-    * Forza Horizon 4 / 5 "Dash"           : 331 bytes  (adds TireWear x4 + TrackOrdinal)
-    * Forza Horizon 6 "Dash"               : 324 bytes  (this module)
+    * Forza Motorsport (2023) "Dash"       : 331 bytes  (adds TireWear x4 + TrackOrdinal)
+    * Forza Horizon 4 / 5 / 6 "Dash"       : 324 bytes  (this module)
 
-Forza Horizon 6 specifics that this module encodes (and that MUST NOT be copied
-blindly from an FH4/FH5/FM parser):
+**Forza Horizon 6 uses the exact FH4/FH5 "Horizon" layout** — this was
+confirmed empirically against live FH6 captures (2026-07-18) rather than
+assumed. The validation method, which anyone can reproduce from the `/debug`
+page: the sled's ``VelocityX/Y/Z`` vector magnitude must equal the dash tail's
+``Speed`` field. Under this layout they matched to 3 decimal places on every
+captured frame (e.g. 37.822 vs 37.82 m/s), tyre temps decoded to the
+plausible 180–230 °F hot-lap band, ``DistanceTraveled`` and
+``CurrentRaceTime`` advanced monotonically, and the ``Accel`` byte tracked
+real throttle application. A one-byte misplacement of any tail field breaks
+all of those simultaneously (a little-endian float read one byte off puts a
+foreign byte in the exponent), so this cross-check pins the layout hard.
+
+The Horizon layout relative to FM7 "Dash":
 
     * The packet is exactly **324 bytes**.
-    * FH6 **removes** ``TireWear`` (4 floats) and ``TrackOrdinal`` (s32) that
-      FH4/FH5 append at the tail. Never parse those on FH6.
-    * FH6 **inserts** three new fields immediately after ``NumCylinders`` and
-      before ``PositionX``:
+    * Horizon titles **insert 12 bytes** between ``NumCylinders`` and
+      ``PositionX`` (offsets 232..243). The first 4 bytes decode as a small
+      stable per-car int we expose as ``CarGroup`` (Horizon car
+      category/group); the remaining 8 bytes have always read as zero in our
+      captures and are exposed as ``Unknown1``/``Unknown2`` (f32).
+    * The dash tail (``PositionX`` .. ``NormalizedAIBrakeDifference``) is the
+      FM7 "Dash" tail, verbatim, at offsets 244..322.
+    * One final byte (offset 323) closes the packet; it has always read 0 and
+      is exposed as ``Unknown3`` (u8) so community captures can inspect it.
+    * There is **no** ``TireWear`` and **no** ``TrackOrdinal`` — those are
+      Forza Motorsport (2023) fields, absent from all Horizon packets.
 
-          - ``CarGroup``          : s32  (car group / division ordinal)
-          - ``SmashableVelDiff``  : f32  (impact velocity delta vs smashables)
-          - ``SmashableMass``     : f32  (mass involved in the last smashable hit)
-
-      followed by a single reserved/alignment byte so the inserted block is
-      13 bytes wide. This reserved byte is what reconciles the FM7 "Dash"
-      body (311 bytes) with the documented FH6 length of 324 bytes
-      (232 sled + 13 FH6 car-info block + 79 dash tail = 324).
+Units on the wire: ``Speed`` m/s · ``Power`` watts · ``Torque`` N·m ·
+``TireTemp*`` **degrees Fahrenheit** · ``Boost`` PSI · lap/race times seconds.
 
 Everything below is derived from the struct layout, then validated at import
 time by asserting ``struct.calcsize(FH6_FORMAT) == FH6_PACKET_SIZE``. The unit
@@ -119,14 +131,14 @@ _FIELD_TABLE: List[Tuple[str, str]] = [
     ("CarPerformanceIndex", "i"),
     ("DrivetrainType", "i"),
     ("NumCylinders", "i"),
-    # -- FH6 car-info insertion (13 bytes) ---------------------------------
-    # These three fields are unique to FH6 and are inserted here, *between*
-    # NumCylinders and PositionX.
+    # -- Horizon insertion (12 bytes, offsets 232..243) ---------------------
+    # Present in FH4/FH5/FH6. First int decodes as a small stable per-car
+    # value (car group/category); the two floats have only ever been observed
+    # as 0.0. Captured verbatim so recordings preserve the full wire packet.
     ("CarGroup", "i"),
-    ("SmashableVelDiff", "f"),
-    ("SmashableMass", "f"),
-    ("_ReservedFH6", "x"),  # one reserved/alignment byte -> block is 13 bytes
-    # -- Dash tail (79 bytes) ----------------------------------------------
+    ("Unknown1", "f"),
+    ("Unknown2", "f"),
+    # -- Dash tail (79 bytes, offsets 244..322) -----------------------------
     ("PositionX", "f"),
     ("PositionY", "f"),
     ("PositionZ", "f"),
@@ -154,6 +166,9 @@ _FIELD_TABLE: List[Tuple[str, str]] = [
     ("Steer", "b"),           # -127..127
     ("NormalizedDrivingLine", "b"),
     ("NormalizedAIBrakeDifference", "b"),
+    # -- Final byte (offset 323) --------------------------------------------
+    # Always observed 0; captured so the full packet round-trips.
+    ("Unknown3", "B"),
 ]
 
 # Build the struct format string (little-endian, packed).
@@ -269,8 +284,8 @@ class TelemetryFrame:
     DrivetrainType: int = 0
     NumCylinders: int = 0
     CarGroup: int = 0
-    SmashableVelDiff: float = 0.0
-    SmashableMass: float = 0.0
+    Unknown1: float = 0.0
+    Unknown2: float = 0.0
     PositionX: float = 0.0
     PositionY: float = 0.0
     PositionZ: float = 0.0
@@ -298,6 +313,7 @@ class TelemetryFrame:
     Steer: int = 0
     NormalizedDrivingLine: int = 0
     NormalizedAIBrakeDifference: int = 0
+    Unknown3: int = 0
 
     # -- Convenience conversions (not on the wire) --------------------------
     @property
@@ -365,6 +381,25 @@ class TelemetryFrame:
         return str(self.Gear)
 
     @property
+    def tire_temps_f(self) -> "List[float]":
+        """Tyre temps [FL, FR, RL, RR] in Fahrenheit, exactly as on the wire."""
+        return [
+            self.TireTempFrontLeft,
+            self.TireTempFrontRight,
+            self.TireTempRearLeft,
+            self.TireTempRearRight,
+        ]
+
+    @property
+    def tire_temps_c(self) -> "List[float]":
+        """Tyre temps [FL, FR, RL, RR] converted to Celsius.
+
+        Forza emits Fahrenheit; the dashboard's default display is Celsius, so
+        the conversion lives here in the one place units are defined.
+        """
+        return [(t - 32.0) * 5.0 / 9.0 for t in self.tire_temps_f]
+
+    @property
     def drivetrain(self) -> str:
         return DRIVETRAIN.get(self.DrivetrainType, "?")
 
@@ -400,15 +435,16 @@ class TelemetryFrame:
             "last_lap": round(self.LastLap, 3),
             "best_lap": round(self.BestLap, 3),
             "lap_number": int(self.LapNumber),
+            "race_position": int(self.RacePosition),
+            "race_time": round(self.CurrentRaceTime, 3),
+            "dist_m": round(self.DistanceTraveled, 1),
+            "fuel": round(self.Fuel, 4),
+            "pos": [round(self.PositionX, 1), round(self.PositionZ, 1)],
             "accel_long": round(self.AccelerationZ, 3),
             "accel_lat": round(self.AccelerationX, 3),
             "yaw_rate": round(self.AngularVelocityY, 4),
-            "tire_temp": [
-                round(self.TireTempFrontLeft, 1),
-                round(self.TireTempFrontRight, 1),
-                round(self.TireTempRearLeft, 1),
-                round(self.TireTempRearRight, 1),
-            ],
+            "tire_temp_f": [round(t, 1) for t in self.tire_temps_f],
+            "tire_temp_c": [round(t, 1) for t in self.tire_temps_c],
             "slip_ratio": [
                 round(self.TireSlipRatioFrontLeft, 3),
                 round(self.TireSlipRatioFrontRight, 3),

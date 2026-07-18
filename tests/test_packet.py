@@ -67,19 +67,22 @@ def test_known_sled_offsets():
         assert FIELD_OFFSETS[name] == off, f"{name} should be at {off}"
 
 
-def test_fh6_inserts_cargroup_smashables_after_numcylinders():
-    # FH6-specific: CarGroup, SmashableVelDiff, SmashableMass are inserted
-    # immediately after NumCylinders (offset 228, size 4 -> ends at 232).
+def test_horizon_insertion_block_offsets():
+    # Horizon titles insert 12 bytes between NumCylinders and PositionX
+    # (offsets 232..243): CarGroup + two always-zero floats.
     assert FIELD_OFFSETS["NumCylinders"] == 228
     assert FIELD_OFFSETS["CarGroup"] == 232
-    assert FIELD_OFFSETS["SmashableVelDiff"] == 236
-    assert FIELD_OFFSETS["SmashableMass"] == 240
-    # ...and PositionX comes *after* the 13-byte FH6 block (incl. reserved byte).
-    assert FIELD_OFFSETS["PositionX"] == 245
+    assert FIELD_OFFSETS["Unknown1"] == 236
+    assert FIELD_OFFSETS["Unknown2"] == 240
+    # ...and PositionX starts the FM7-style dash tail at 244. This exact
+    # offset was pinned empirically against live FH6 captures (Speed field
+    # matches the sled |Velocity| only at 244; one byte later it decodes to
+    # garbage) — see the module docstring of app.packet.
+    assert FIELD_OFFSETS["PositionX"] == 244
 
 
 def test_fh6_omits_tirewear_and_trackordinal():
-    # FH6 must NOT contain these FH4/FH5 fields.
+    # Horizon packets must NOT contain these Forza Motorsport (2023) fields.
     assert "TireWearFrontLeft" not in FIELD_NAMES
     assert "TireWearFrontRight" not in FIELD_NAMES
     assert "TireWearRearLeft" not in FIELD_NAMES
@@ -89,24 +92,37 @@ def test_fh6_omits_tirewear_and_trackordinal():
 
 def test_dash_tail_offsets():
     expected = {
-        "PositionX": 245,
-        "Speed": 257,
-        "Power": 261,
-        "Torque": 265,
-        "Boost": 285,
-        "BestLap": 297,
-        "LapNumber": 313,
-        "Accel": 316,
-        "Brake": 317,
-        "Gear": 320,
-        "Steer": 321,
-        "NormalizedDrivingLine": 322,
-        "NormalizedAIBrakeDifference": 323,
+        "PositionX": 244,
+        "PositionY": 248,
+        "PositionZ": 252,
+        "Speed": 256,
+        "Power": 260,
+        "Torque": 264,
+        "TireTempFrontLeft": 268,
+        "TireTempRearRight": 280,
+        "Boost": 284,
+        "Fuel": 288,
+        "DistanceTraveled": 292,
+        "BestLap": 296,
+        "LastLap": 300,
+        "CurrentLap": 304,
+        "CurrentRaceTime": 308,
+        "LapNumber": 312,
+        "RacePosition": 314,
+        "Accel": 315,
+        "Brake": 316,
+        "Clutch": 317,
+        "HandBrake": 318,
+        "Gear": 319,
+        "Steer": 320,
+        "NormalizedDrivingLine": 321,
+        "NormalizedAIBrakeDifference": 322,
+        "Unknown3": 323,
     }
     for name, off in expected.items():
         assert FIELD_OFFSETS[name] == off, f"{name} should be at {off}"
-    # Last byte must be within the packet.
-    assert FIELD_OFFSETS["NormalizedAIBrakeDifference"] == FH6_PACKET_SIZE - 1
+    # The captured trailing byte must close the packet exactly.
+    assert FIELD_OFFSETS["Unknown3"] == FH6_PACKET_SIZE - 1
 
 
 def test_parse_rejects_wrong_length():
@@ -141,8 +157,8 @@ def test_roundtrip_known_values():
         "DrivetrainType": 1,
         "NumCylinders": 8,
         "CarGroup": 3,
-        "SmashableVelDiff": 1.25,
-        "SmashableMass": 900.0,
+        "Unknown1": 1.25,
+        "Unknown2": 900.0,
         "Gear": 4,
         "Accel": 255,
         "Brake": 0,
@@ -160,8 +176,8 @@ def test_roundtrip_known_values():
     assert frame.CarOrdinal == 2145
     assert frame.NumCylinders == 8
     assert frame.CarGroup == 3
-    assert abs(frame.SmashableVelDiff - 1.25) < 1e-4
-    assert abs(frame.SmashableMass - 900.0) < 1e-2
+    assert abs(frame.Unknown1 - 1.25) < 1e-4
+    assert abs(frame.Unknown2 - 900.0) < 1e-2
     assert frame.Gear == 4
     assert frame.Steer == -50
     assert frame.LapNumber == 3
@@ -213,7 +229,24 @@ def test_live_payload_shape():
     frame = parse(pack({name: 0 for name in FIELD_NAMES}))
     payload = frame.live_payload()
     for key in ("speed_kmh", "gear", "rpm", "throttle", "brake",
-                "tire_temp", "slip_ratio", "combined_slip", "susp_norm"):
+                "tire_temp_f", "tire_temp_c", "slip_ratio", "combined_slip",
+                "susp_norm", "pos", "race_time", "dist_m"):
         assert key in payload
-    assert len(payload["tire_temp"]) == 4
+    assert len(payload["tire_temp_f"]) == 4
     assert len(payload["susp_norm"]) == 4
+
+
+def test_tire_temp_fahrenheit_to_celsius():
+    values = {name: 0 for name in FIELD_NAMES}
+    values.update({
+        "TireTempFrontLeft": 212.0,   # boiling point: 100 C
+        "TireTempFrontRight": 32.0,   # freezing point: 0 C
+        "TireTempRearLeft": 176.0,    # 80 C
+        "TireTempRearRight": 194.0,   # 90 C
+    })
+    frame = parse(pack(values))
+    c = frame.tire_temps_c
+    assert abs(c[0] - 100.0) < 1e-3
+    assert abs(c[1] - 0.0) < 1e-3
+    assert abs(c[2] - 80.0) < 1e-3
+    assert abs(c[3] - 90.0) < 1e-3
