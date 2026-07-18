@@ -288,6 +288,48 @@ def test_position_gate_survives_mid_race_rewind_snap():
     assert len([l for l in rep["laps"] if l["complete"]]) == 3
 
 
+def test_position_laps_survive_zeroed_staging_and_spur_start():
+    """Two real-world hazards: staged events broadcast Position (0,0)
+    while the world loads (a gate anchored there sits kilometres off the
+    circuit), and the grid can sit on a run-in spur the loop never
+    revisits. The gate must be discovered from the trajectory, and the
+    spur reported as a leading partial."""
+    sd = _circuit_session(loops=3.0)
+    n = sd.n
+    q = n // 12
+    # Zero positions during staging (the Legends Isle failure).
+    sd.columns["PositionX"][:q] = 0.0
+    sd.columns["PositionZ"][:q] = 0.0
+    # Splice a straight run-in spur that joins the circle continuously at
+    # its top (position and heading both match at the join).
+    spur = q + (n - q) // 6
+    zr = float(np.max(sd.columns["PositionZ"]))  # circle top = 2r
+    sd.columns["PositionX"][q:spur] = np.linspace(1500, 0, spur - q)
+    sd.columns["PositionZ"][q:spur] = zr
+    rep = lap_report(sd)
+    assert rep["lap_source"] == "position-gate"
+    complete = [l for l in rep["laps"] if l["complete"]]
+    assert len(complete) >= 2
+    assert not rep["laps"][0]["complete"], \
+        "the run-in spur must surface as a leading partial, never ranked"
+    assert rep["best_lap_s"] == min(l["time_s"] for l in complete)
+
+
+def test_position_laps_rephase_to_event_end():
+    """When the discovered phase strands a large untimed tail (event ends
+    mid-loop relative to the discovered gate), the gate re-anchors near
+    the event end so the real final lap is captured, not smeared."""
+    sd = _circuit_session(loops=3.6)
+    rep = lap_report(sd)
+    assert rep["lap_source"] == "position-gate"
+    complete = [l for l in rep["laps"] if l["complete"]]
+    assert len(complete) == 3
+    # The 0.6-loop leftover lands at the START as a partial (never ranked).
+    partials = [l for l in rep["laps"] if not l["complete"]]
+    assert partials and all(l["time_s"] is not None for l in partials)
+    assert rep["best_lap_s"] == min(l["time_s"] for l in complete)
+
+
 def test_point_to_point_run_gets_no_position_laps():
     """A run that never returns to its start stays a single timed run."""
     sd = _with_run_signature(_synthetic_session(seconds=200.0, hz=30.0))

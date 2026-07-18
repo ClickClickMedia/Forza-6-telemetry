@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.11] - 2026-07-18
+
+### Fixed
+- **Lap splitting now works on every staged circuit, not just ones whose
+  grid sits on the racing loop.** The gate is discovered from the
+  trajectory itself (the earliest point the car revisits travelling the
+  same direction) instead of being anchored at the launch frame — staged
+  events broadcast Position (0,0) while the world loads, which used to
+  strand the gate kilometres off-circuit and silently fall back to one
+  whole-event "run". Verified on a real 5-lap event: partial opening
+  segment + four complete laps, with the reconstructed final lap landing
+  within half a second of the driver's manually-read time.
+
+### Added
+- **Crossing times are interpolated between telemetry frames** (the
+  along-track coordinate's zero-crossing), not snapped to the nearest
+  frame.
+- **Leading partials**: the segment before the first gate pass (run-in
+  spur, or a recording that starts mid-lap) is reported as a partial lap
+  and never ranked.
+- **Finish-phased boundaries**: when the discovered gate phase strands a
+  large untimed tail, the gate re-anchors near the event end — the one
+  point the game pins — so the real final lap is captured whole.
+- Reports show the staged event's **total time alongside the laps**, and
+  say how many partial segments exist.
+
 ## [2.1.10] - 2026-07-18
 
 ### Fixed

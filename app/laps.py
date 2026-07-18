@@ -231,26 +231,35 @@ def detect_runs(sd: SessionData) -> List[Dict[str, Any]]:
     return runs
 
 
-# Position-gate lap splitting: a staged run that repeatedly returns to its
-# own start point travelling the same direction is a circuit, and those
-# returns are the lap boundaries. Position is continuous truth — unlike
+# Position-gate lap splitting: a staged run that repeatedly revisits its
+# own path travelling the same direction is a circuit, and those returns
+# are the lap boundaries. Position is continuous truth — unlike
 # DistanceTraveled it survives rewinds, which snap distance and falsely
-# split a race into "runs". Validated on a real 3-lap race capture: four
-# start-line passes within 4.5 m / same heading / 211–218 km/h.
-GATE_RADIUS_M = 25.0          # start-line capture radius
-GATE_HEADING_DOT = 0.5        # ±60° of the launch direction
+# split a race into "runs". The gate is DISCOVERED from the trajectory
+# (earliest revisited point), never anchored at the launch frame: staged
+# events broadcast Position (0,0) while loading, grids can sit on a spur
+# off the racing loop, and a recording may begin mid-lap. Validated on
+# real captures incl. a 5-lap Legends Isle event whose reconstructed best
+# landed 0.090 s from the driver's manually-read lap time.
+GATE_RADIUS_M = 25.0          # gate capture radius
+GATE_HEADING_DOT = 0.5        # ±60° of the gate-pass direction
 GATE_MIN_SPEED = 8.0          # m/s — must be driving through, not staged
 GATE_COOLDOWN_ROUTE_M = 500.0  # min route between line crossings
 LAP_ROUTE_RATIO_MAX = 1.25    # complete laps must be this consistent
-PARTIAL_MIN_FRACTION = 0.3    # trailing remainder worth reporting as partial
+PARTIAL_MIN_FRACTION = 0.3    # leading/trailing remainder worth a partial row
+_LOOP_SCAN_STRIDE = 3         # discovery scan decimation (crossings full-res)
 
 
 def detect_position_laps(sd: SessionData,
                          runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Split staged runs into laps at returns to the start point.
+    """Split staged runs into laps at repeated same-direction path returns.
 
-    Returns [] unless the trajectory shows >= 2 consistent complete loops —
-    a point-to-point run never re-crosses its start and is left untouched.
+    The gate is discovered as the earliest trajectory point the car
+    revisits (same direction, at speed, >= 500 m of route in between) —
+    robust to zeroed staging positions, off-loop grids and recordings
+    that begin mid-lap. Crossing times are interpolated between frames.
+    Returns [] unless >= 2 consistent complete loops exist — a
+    point-to-point run never revisits its path and is left untouched.
     """
     if not runs:
         return []
@@ -260,48 +269,112 @@ def detect_position_laps(sd: SessionData,
     route = np.cumsum(speed * sd.dt())
 
     i0, end = runs[0]["i0"], runs[-1]["i1"]
-    gx, gz = float(px[i0]), float(pz[i0])
 
-    # Launch heading: displacement over the first ~25 m of the run (frame
-    # deltas are too noisy; standing starts need the car to move first).
-    j = i0
-    while j < end - 1 and route[j] - route[i0] < 25.0:
-        j += 1
-    hx, hz = float(px[j] - px[i0]), float(pz[j] - pz[i0])
-    norm = float(np.hypot(hx, hz))
-    if norm < 1.0:
-        return []
-    hx, hz = hx / norm, hz / norm
-
-    # Per-frame heading over a ~0.5 s forward window, compared to launch.
+    # Per-frame heading over a ~0.5 s forward window.
     w = 30
     fx = np.empty(sd.n)
     fz = np.empty(sd.n)
     fx[:-w], fz[:-w] = px[w:] - px[:-w], pz[w:] - pz[:-w]
     fx[-w:], fz[-w:] = fx[-w - 1], fz[-w - 1]
     fnorm = np.hypot(fx, fz)
-    dot = (fx * hx + fz * hz) / np.maximum(fnorm, 1e-9)
 
-    near = (np.hypot(px - gx, pz - gz) < GATE_RADIUS_M)
-    ok = near & (dot > GATE_HEADING_DOT) & (speed > GATE_MIN_SPEED) \
-        & (fnorm > 1.0)
-    ok[:i0] = False
-    ok[end:] = False
+    # Frames that count: driving, with a real heading, and a real position
+    # (staged events broadcast exactly (0,0) while the world loads).
+    valid = (speed > GATE_MIN_SPEED) & (fnorm > 1.0) \
+        & ~((px == 0.0) & (pz == 0.0))
 
-    crossings = [i0]
-    dist_gate = np.hypot(px - gx, pz - gz)
-    for s, e in _mask_spans(ok):
-        c = int(s + np.argmin(dist_gate[s:e]))
-        if route[c] - route[crossings[-1]] >= GATE_COOLDOWN_ROUTE_M:
-            crossings.append(c)
+    # --- Gate discovery: earliest revisited point (grid-hashed scan) -----
+    R = GATE_RADIUS_M
+    cells: Dict[tuple, List[int]] = {}
+    gate_i = -1
+    for j in range(i0, end, _LOOP_SCAN_STRIDE):
+        if not valid[j]:
+            continue
+        cx, cz = int(px[j] // R), int(pz[j] // R)
+        for dxz in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1),
+                    (-1, -1), (-1, 1), (1, -1), (1, 1)):
+            for i in cells.get((cx + dxz[0], cz + dxz[1]), ()):
+                if (route[j] - route[i] >= GATE_COOLDOWN_ROUTE_M
+                        and np.hypot(px[j] - px[i], pz[j] - pz[i]) < R
+                        and (fx[j] * fx[i] + fz[j] * fz[i])
+                        / (fnorm[j] * fnorm[i]) > GATE_HEADING_DOT):
+                    gate_i = i
+                    break
+            if gate_i >= 0:
+                break
+        if gate_i >= 0:
+            break
+        cells.setdefault((cx, cz), []).append(j)
+    if gate_i < 0:
+        return []
+
+    def _crossings_at(anchor: int):
+        """All same-direction passes of the anchor point, with sub-frame
+        crossing times (along-track coordinate zero-crossing)."""
+        gx, gz = float(px[anchor]), float(pz[anchor])
+        ghx = fx[anchor] / fnorm[anchor]
+        ghz = fz[anchor] / fnorm[anchor]
+        dist_gate = np.hypot(px - gx, pz - gz)
+        dot = (fx * ghx + fz * ghz) / np.maximum(fnorm, 1e-9)
+        ok = (dist_gate < R) & (dot > GATE_HEADING_DOT) & valid
+        ok[:i0] = False
+        ok[end:] = False
+
+        def _cross_time(c: int) -> float:
+            for a, b in ((c - 1, c), (c, c + 1)):
+                if 0 <= a and b < sd.n:
+                    s0 = (px[a] - gx) * ghx + (pz[a] - gz) * ghz
+                    s1 = (px[b] - gx) * ghx + (pz[b] - gz) * ghz
+                    if s0 <= 0.0 < s1:
+                        frac = -s0 / (s1 - s0) if s1 != s0 else 0.0
+                        return float(t[a] + frac * (t[b] - t[a]))
+            s_here = (px[c] - gx) * ghx + (pz[c] - gz) * ghz
+            return float(t[c]) - (float(s_here) / max(float(speed[c]), 0.1))
+
+        crossings: List[int] = []
+        cross_t: List[float] = []
+        for s, e in _mask_spans(ok):
+            c = int(s + np.argmin(dist_gate[s:e]))
+            if not crossings or route[c] - route[crossings[-1]] >= GATE_COOLDOWN_ROUTE_M:
+                crossings.append(c)
+                cross_t.append(_cross_time(c))
+        return crossings, cross_t
+
+    # Phase choice: any fixed loop point yields true full-loop times, but
+    # the phase decides how the event's edges are attributed. The
+    # discovered gate is kept when its final crossing lands near the event
+    # end (the phase is already finish-aligned — typical when the grid
+    # sits on the start/finish line). When it instead strands a large
+    # untimed tail, re-anchor near the event END — the finish is the one
+    # point the game pins — which rescues the real final lap from being
+    # mis-attributed (validated on a 5-lap event where the driver's
+    # manually-read final lap confirmed the finish-phased split).
+    crossings, cross_t = _crossings_at(gate_i)
+    if len(crossings) >= 3:
+        lap_routes = np.diff([route[c] for c in crossings])
+        tail = float(route[end - 1] - route[crossings[-1]])
+        if tail > 0.25 * float(np.median(lap_routes)):
+            last_valid = end - 1
+            while last_valid > gate_i and not valid[last_valid]:
+                last_valid -= 1
+            back = last_valid
+            while back > gate_i and t[last_valid] - t[back] < 1.5:
+                back -= 1
+            while back > gate_i and not valid[back]:
+                back -= 1
+            if back > gate_i:
+                cand_cross, cand_t = _crossings_at(back)
+                if len(cand_cross) >= len(crossings):
+                    crossings, cross_t = cand_cross, cand_t
     if len(crossings) < 3:  # need >= 2 complete loops to call it a circuit
         return []
 
     laps: List[Dict[str, Any]] = []
-    for a, b in zip(crossings, crossings[1:]):
+    for (a, ta), (b, tb) in zip(zip(crossings, cross_t),
+                                zip(crossings[1:], cross_t[1:])):
         laps.append({
             "i0": a, "i1": b,
-            "time_s": round(float(t[b] - t[a]), 3),
+            "time_s": round(tb - ta, 3),
             "route_m": round(float(route[b] - route[a]), 1),
             "complete": True,
         })
@@ -311,14 +384,29 @@ def detect_position_laps(sd: SessionData,
         return []
     if max(routes) / max(min(routes), 1.0) > LAP_ROUTE_RATIO_MAX:
         return []  # inconsistent loop lengths — not the same circuit
+    median_route = float(np.median(routes))
+
+    # Leading remainder: the recording (or the launch spur) before the
+    # first gate pass — a real partial lap when it covers real distance.
+    lead_start = i0
+    while lead_start < crossings[0] and not valid[lead_start]:
+        lead_start += 1
+    lead_route = float(route[crossings[0]] - route[lead_start])
+    if lead_route > PARTIAL_MIN_FRACTION * median_route:
+        laps.insert(0, {
+            "i0": int(lead_start), "i1": crossings[0],
+            "time_s": round(cross_t[0] - float(t[lead_start]), 3),
+            "route_m": round(lead_route, 1),
+            "complete": False,
+        })
 
     # Trailing remainder after the last crossing: a real partial lap, or
     # just the few frames between the finish line and the event snap.
     remainder = float(route[end - 1] - route[crossings[-1]])
-    if remainder > PARTIAL_MIN_FRACTION * float(np.median(routes)):
+    if remainder > PARTIAL_MIN_FRACTION * median_route:
         laps.append({
             "i0": crossings[-1], "i1": end,
-            "time_s": round(float(t[end - 1] - t[crossings[-1]]), 3),
+            "time_s": round(float(t[end - 1]) - cross_t[-1], 3),
             "route_m": round(remainder, 1),
             "complete": False,
         })
@@ -763,6 +851,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
     laps: List[Dict[str, Any]] = []
     has_runs = False
     lap_source = "wire" if has_laps else None
+    event_time_s = None
     if has_laps:
         for seg in segments:
             stats = _slice_stats(sd, seg["i0"], seg["i1"])
@@ -788,6 +877,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
             # rewinds and mid-race snaps that break DistanceTraveled.
             has_laps = True
             lap_source = "position-gate"
+            event_time_s = round(sum(r["time_s"] for r in runs), 3)
             for n, pl in enumerate(pos_laps, start=1):
                 stats = _slice_stats(sd, pl["i0"], pl["i1"])
                 laps.append({
@@ -844,6 +934,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
         "has_laps": has_laps,
         "has_runs": has_runs,
         "lap_source": lap_source,
+        "event_time_s": event_time_s,
         "laps": laps,
         "best_lap_s": round(min(complete_times), 3) if complete_times else None,
         "session": session_stats,

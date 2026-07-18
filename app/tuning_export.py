@@ -313,10 +313,17 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     best = rep.get("best_lap_s")
     n_complete = sum(1 for l in rep["laps"] if l.get("complete"))
     if rep.get("lap_source") == "position-gate":
-        add(f"- Circuit event with **no lap data on the wire**: "
-            f"**{n_complete} laps** split at start-line returns (the car "
-            f"re-passed its launch point within {25:.0f} m travelling the "
-            f"same direction) · best lap **{_fmt_lap_time(best)}** "
+        n_partial = sum(1 for l in rep["laps"] if not l.get("complete"))
+        ev = rep.get("event_time_s")
+        add(f"- Staged circuit with **no lap data on the wire**: total "
+            f"event time **{_fmt_lap_time(ev) if ev else '?'}** · "
+            f"**{n_complete} complete laps** split at gate returns (the car "
+            f"repeatedly re-passed the same point within {25:.0f} m "
+            f"travelling the same direction; crossing times interpolated "
+            f"between frames)"
+            + (f" · {n_partial} partial segment(s) — never ranked"
+               if n_partial else "")
+            + f" · best lap **{_fmt_lap_time(best)}** "
             f"*(estimated, line-to-line; a mid-race rewind stretches that "
             f"lap's time and route but never corrupts the others)*")
     elif rep["has_laps"]:
