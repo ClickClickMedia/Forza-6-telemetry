@@ -1,0 +1,48 @@
+name: "🐛 Bug report"
+description: Something isn't working (crash, dashboard issue, recording problem, etc.)
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start with `docker compose up -d`
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: run_mode
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker / docker compose
+        - Standalone Windows .exe
+        - From source (uvicorn)
+        - Synthetic mode (no console)
+    validations:
+      required: true
+  - type: input
+    id: host_os
+    attributes:
+      label: Host OS
+      placeholder: e.g. Windows 11, Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste output from `docker compose logs` or the exe console window.
+      render: shell
+    validations:
+      required: false

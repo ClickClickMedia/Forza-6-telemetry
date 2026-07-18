@@ -1,22 +1,43 @@
 # Forza Horizon 6 Telemetry
 
-A self-hosted, Dockerised telemetry collector and mobile dashboard for
-**Forza Horizon 6**. It listens for Forza's "Data Out" UDP stream, parses every
-field of the **324-byte FH6 packet**, shows a live dashboard on your phone,
-records sessions to disk, and analyses/compares runs — all on your own network,
-with **no cloud dependencies**.
+![Build](https://github.com/ClickClickMedia/Forza-6-telemetry/actions/workflows/build-windows-exe.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
+![No cloud](https://img.shields.io/badge/cloud-none-informational.svg)
+
+A self-hosted telemetry collector and **mobile dashboard** for **Forza Horizon
+6**. It listens for Forza's "Data Out" UDP stream, parses every field of the
+**324-byte FH6 packet**, shows a live dashboard on your phone, records sessions
+to disk, and analyses/compares runs — all on your own Wi-Fi, with **no cloud and
+no external dependencies**.
+
+Runs two ways: as a **Docker container**, or as a **single double-click
+`.exe`** on Windows (no Python, no Docker). There's also a built-in **synthetic
+generator**, so you can try the whole thing right now without a console.
 
 ```
-Xbox  ──UDP 9876──▶  Docker host  ──HTTP/WebSocket 8080──▶  Phone (same Wi-Fi)
-(Data Out)          (this app)                              (dashboard PWA)
+Xbox / PC  ──UDP 9876──▶  collector  ──HTTP/WebSocket 8080──▶  Phone (same Wi-Fi)
+(Data Out)               (this app)                            (dashboard PWA)
 ```
+
+> ### 📡 Help validate the FH6 packet layout
+>
+> This parser is built to the FH6 "Data Out" layout described below (324 bytes;
+> `CarGroup`/`SmashableVelDiff`/`SmashableMass` added, `TireWear`/`TrackOrdinal`
+> removed). **If you're testing against a real game and a value looks wrong**,
+> open the **`/debug`** page — it shows the live byte offset and decoded value of
+> every field. Field definitions live in one place ([`app/packet.py`](app/packet.py))
+> and every offset is pinned by unit tests, so a correction is a one-line change.
+> Please [open an issue](../../issues/new/choose) with a `/debug` screenshot if
+> you spot a mismatch — community captures are how the layout gets confirmed.
 
 ## Features
 
 - **UDP receiver** — asyncio `DatagramProtocol` bound to `0.0.0.0:9876`.
-  Accepts only 324-byte packets, parses the official FH6 field order
-  (little-endian), and never crashes on malformed input. Tracks packets/sec,
-  invalid/dropped packets and last-packet time.
+  Accepts only 324-byte packets, parses the FH6 field order (little-endian, see
+  [the packet section](#the-fh6-packet-324-bytes)), and never crashes on
+  malformed input. Tracks packets/sec, invalid/dropped packets and last-packet
+  time.
 - **Live mobile dashboard** — dark theme, large readouts, landscape mode,
   installable PWA, auto-reconnecting WebSocket, Wake Lock support. Browser is
   updated at ~18 Hz (configurable) rather than every game frame.
@@ -457,8 +478,33 @@ docker compose build      # build the image
 docker compose up -d      # run it
 ```
 
+## Security & scope
+
+This is a **LAN tool with no authentication** — anyone who can reach port 8080
+can view the dashboard and manage recordings. That's fine on a home network,
+but:
+
+- **Do not expose ports 8080/9876 to the internet** (no port-forwarding on your
+  router, no public reverse proxy). Keep it on your local Wi-Fi/LAN.
+- The UDP receiver accepts telemetry from any source on the network; it only
+  ever *reads* 324-byte packets and never executes anything from them.
+- All data stays local — recordings live in `./data` on your machine. There is
+  no telemetry, analytics, or cloud call anywhere in this project.
+
+## Contributing
+
+Contributions welcome — especially **real-game packet captures** to confirm or
+correct the FH6 field offsets. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to
+run the tests, the code layout, and exactly how to validate/fix the packet
+spec (it's a one-line change plus a test). Bug reports and packet-mismatch
+reports have [issue templates](.github/ISSUE_TEMPLATE) to make them quick.
+
 ## License
 
-Provided as-is for personal, local use. Not affiliated with or endorsed by
-Microsoft, Turn 10, or Playground Games. "Forza Horizon" is a trademark of
-Microsoft.
+Released under the [MIT License](LICENSE) © 2026 ClickClickMedia — free to use,
+modify, and share.
+
+Not affiliated with, endorsed by, or sponsored by Microsoft, Turn 10 Studios,
+or Playground Games. "Forza" and "Forza Horizon" are trademarks of Microsoft.
+This project reads only the telemetry the game voluntarily broadcasts via its
+built-in **Data Out** feature; it contains no game code or assets.

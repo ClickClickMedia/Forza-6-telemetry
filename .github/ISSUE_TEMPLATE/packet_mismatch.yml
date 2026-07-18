@@ -1,0 +1,56 @@
+name: "📡 Packet / field mismatch"
+description: A telemetry value looks wrong, or a field seems to be at the wrong offset.
+title: "[packet] <field> looks wrong"
+labels: ["packet-spec"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping confirm the FH6 packet layout! The `/debug` page has
+        everything we need — please attach a screenshot of it.
+  - type: input
+    id: game
+    attributes:
+      label: Game & platform
+      description: e.g. "Forza Horizon 6 on Xbox Series X", or "FH6 on PC (Steam)".
+      placeholder: Forza Horizon 6 on <platform>
+    validations:
+      required: true
+  - type: input
+    id: car
+    attributes:
+      label: Car (and ordinal if known)
+      description: The car you were driving when you saw the issue.
+      placeholder: e.g. 2020 Toyota Supra
+    validations:
+      required: false
+  - type: input
+    id: field
+    attributes:
+      label: Which field / value looks wrong?
+      placeholder: e.g. "Speed reads ~3.6x too high", "Gear is off by one"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect vs what you saw?
+      placeholder: |
+        In-game speed ~200 km/h, dashboard showed ~720 km/h.
+    validations:
+      required: true
+  - type: textarea
+    id: debug
+    attributes:
+      label: /debug screenshot or field dump
+      description: Open http://<host>:8080/debug and paste a screenshot, or paste the JSON from /api/debug/last.
+    validations:
+      required: true
+  - type: input
+    id: received_size
+    attributes:
+      label: Received packet size (from /debug)
+      description: Should be 324. If it's something else, tell us what.
+      placeholder: "324"
+    validations:
+      required: false
