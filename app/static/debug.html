@@ -66,6 +66,18 @@
       </p>
     </div>
 
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-head"><span class="eyebrow">Storage</span></div>
+      <div class="spread">
+        <span class="small muted" id="storageInfo">…</span>
+        <button id="btnClearSessions" class="btn small danger">Delete all sessions…</button>
+      </div>
+      <p class="small muted" style="margin:8px 0 0;">
+        Removes every recorded session and its raw data file. Saved car
+        names, tune setups and settings are kept. This cannot be undone.
+      </p>
+    </div>
+
     <div id="specCard" class="card hidden" style="margin-bottom:10px;">
       <div class="card-head"><span class="eyebrow">Spec / field offsets</span>
         <button id="btnSpecHide" class="btn small ghost">Hide</button></div>
@@ -90,7 +102,7 @@
   (function () {
     "use strict";
     const FH = window.FH;
-    const { api, esc } = FH;
+    const { api, esc, toast } = FH;
     FH.shell("debug");
     FH.registerSW();
 
@@ -207,6 +219,39 @@
     api("/health").then((h) => {
       document.getElementById("appVersion").textContent = h.version || "?";
     }).catch(() => {});
+    async function refreshStorage() {
+      try {
+        const r = await api("/api/sessions");
+        const n = (r.sessions || []).length;
+        const bytes = (r.storage || {}).total_bytes || 0;
+        document.getElementById("storageInfo").textContent =
+          n + " session" + (n === 1 ? "" : "s") + " · " + FH.fmtBytes(bytes);
+        document.getElementById("btnClearSessions").disabled = n === 0;
+      } catch (e) {
+        document.getElementById("storageInfo").textContent = "unavailable";
+      }
+    }
+    refreshStorage();
+
+    document.getElementById("btnClearSessions").addEventListener("click", async (e) => {
+      const info = document.getElementById("storageInfo").textContent;
+      if (!confirm("Delete ALL sessions? (" + info + ")\n\n" +
+                   "Car names, tune setups and settings are kept.\n" +
+                   "This cannot be undone.")) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const r = await api("/api/sessions", { method: "DELETE" });
+        toast("Deleted " + r.deleted + " sessions · freed " + FH.fmtBytes(r.freed_bytes));
+      } catch (err) {
+        toast(err.message.includes("409") || /recording/i.test(err.message)
+          ? "A recording is in progress — stop it first"
+          : "Delete failed: " + err.message);
+      }
+      refreshStorage();
+      btn.disabled = false;
+    });
+
     document.getElementById("btnUpdate").addEventListener("click", async (e) => {
       const out = document.getElementById("updateResult");
       e.currentTarget.disabled = true;

@@ -523,6 +523,34 @@ async def patch_session(session_id: int, body: RenameBody) -> Dict[str, Any]:
     return {"ok": True, "changed": changed}
 
 
+@app.delete("/api/sessions")
+async def delete_all_sessions() -> Dict[str, Any]:
+    """Bulk wipe of every recorded session and its raw file. Car names,
+    tune setups and settings survive — they are per-car assets, not
+    session data. Refused while a recording is open."""
+    st = _state()
+    if st.recorder and st.recorder.active_session_id is not None:
+        raise HTTPException(status_code=409,
+                            detail="recording in progress — stop it first")
+    deleted = 0
+    freed = 0
+    for s in st.db.list_sessions():
+        raw_path = st.db.delete_session(s["id"])
+        if raw_path:
+            p = settings.sessions_dir / raw_path
+            try:
+                if p.exists():
+                    freed += p.stat().st_size
+                p.unlink(missing_ok=True)
+            except OSError:
+                log.warning("could not delete raw file",
+                            extra={"extra": {"path": str(p)}})
+        deleted += 1
+    log.info("all sessions deleted",
+             extra={"extra": {"deleted": deleted, "freed_bytes": freed}})
+    return {"ok": True, "deleted": deleted, "freed_bytes": freed}
+
+
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: int) -> Dict[str, Any]:
     st = _state()

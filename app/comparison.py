@@ -32,6 +32,16 @@ def _downsample(arr: np.ndarray, n_out: int) -> np.ndarray:
     return arr[idx]
 
 
+def _downsample_max(arr: np.ndarray, n_out: int) -> np.ndarray:
+    """Bin-max downsampling for spiky channels (slip): point-pick decimation
+    skips right over sub-second slides, hiding them from the route map."""
+    if arr.size <= n_out:
+        return arr
+    edges = np.linspace(0, arr.size, n_out + 1).astype(int)
+    return np.array([float(np.max(arr[a:b])) if b > a else float(arr[a - 1])
+                     for a, b in zip(edges[:-1], edges[1:])])
+
+
 def _channel(sd: SessionData, name: str, n_out: int = TRACE_POINTS) -> List[float]:
     return [round(float(v), 4) for v in _downsample(sd.col(name), n_out)]
 
@@ -105,10 +115,15 @@ def _route(sd: SessionData, colour_by: str = "speed") -> Dict[str, Any]:
     x = _downsample(sd.col("PositionX"), ROUTE_POINTS)
     z = _downsample(sd.col("PositionZ"), ROUTE_POINTS)
     if colour_by == "rear_slip":
+        # Slip is normalized (1.0 = grip limit) but spikes past 15 on kerb
+        # strikes and collisions — one spike must not stretch the colour
+        # scale until real cornering slip reads as "low" (the all-blue-map
+        # bug). Clip to 2.0 and let the client use a FIXED 0–1.5 scale;
+        # bin-max keeps sub-second slides visible after downsampling.
         base = np.maximum(
             sd.col("TireCombinedSlipRearLeft"), sd.col("TireCombinedSlipRearRight")
         )
-        c = _downsample(base, ROUTE_POINTS)
+        c = _downsample_max(np.minimum(base, 2.0), ROUTE_POINTS)
     else:
         colour_by = "speed"
         c = _downsample(sd.col("Speed") * 3.6, ROUTE_POINTS)

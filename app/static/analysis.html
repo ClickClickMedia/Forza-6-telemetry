@@ -105,9 +105,9 @@
         </div>
         <canvas id="routeCanvas" class="chart" style="height:320px;"></canvas>
         <div class="legend" style="margin-top:8px;">
-          <span><span class="swatch" style="background:#4FA8FF"></span>low</span>
-          <span><span class="swatch" style="background:#3BD98A"></span>mid</span>
-          <span><span class="swatch" style="background:#FF4D42"></span>high</span>
+          <span><span class="swatch" style="background:#4FA8FF"></span><span id="legLow">low</span></span>
+          <span><span class="swatch" style="background:#3BD98A"></span><span id="legMid">mid</span></span>
+          <span><span class="swatch" style="background:#FF4D42"></span><span id="legHigh">high</span></span>
           <span id="routeLabel"></span>
         </div>
       </div>
@@ -531,10 +531,18 @@
         .then((r) => { routeData = r; drawRoute(); })
         .catch(() => { routeData = null; drawRoute(); });
       document.getElementById("routeLabel").textContent = "coloured by " + colourBy.replace("_", " ");
+      const slip = colourBy === "rear_slip";
+      // Slip is normalized: 1.0 IS the grip limit, so the scale is fixed
+      // and the legend speaks tyre language instead of low/mid/high.
+      document.getElementById("legLow").textContent = slip ? "grip" : "low";
+      document.getElementById("legMid").textContent = slip ? "at limit" : "mid";
+      document.getElementById("legHigh").textContent = slip ? "sliding" : "high";
     }
     function drawRoute() {
+      const slip = colourBy === "rear_slip";
       routeChart(document.getElementById("routeCanvas"),
-        routeData || { x: [], z: [], c: [] }, { height: 320 });
+        routeData || { x: [], z: [], c: [] },
+        slip ? { height: 320, cMin: 0, cMax: 1.5 } : { height: 320 });
     }
 
     document.querySelectorAll("[data-colour]").forEach((b) => {

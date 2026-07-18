@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.10] - 2026-07-18
+
+### Fixed
+- **The "Rear slip" route colouring works now.** Slip is normalized (1.0 =
+  grip limit) but spikes past 15 on kerb strikes, and the colour scale
+  auto-ranged to the biggest spike — so 92% of a real session's route
+  painted as "low" while a minute of genuine sliding hid in the bottom
+  colour band. The scale is now fixed to the physics (blue = grip, green
+  = at the limit, red = sliding past it) and downsampling takes the max
+  per road segment so sub-second slides stay visible.
+
+### Added
+- **Delete all sessions** on the Debug page: one button wipes every
+  recorded session and its raw files (with size shown and a confirm).
+  Car names, tune setups and settings are kept; refused while recording.
+
 ## [2.1.9] - 2026-07-18
 
 ### Added
