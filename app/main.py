@@ -325,6 +325,44 @@ async def session_route(session_id: int, colour_by: str = "speed") -> Dict[str, 
     return single_route(sd, colour_by)
 
 
+@app.get("/api/sessions/{session_id}/laps")
+async def session_laps(session_id: int) -> Dict[str, Any]:
+    from .laps import lap_report
+    row = _session_or_404(session_id)
+    sd = _load_or_404(row)
+    result = lap_report(sd)
+    result["session_meta"] = _meta(row)
+    return result
+
+
+@app.get("/api/sessions/{session_id}/tuning.md")
+async def session_tuning_md(session_id: int, download: int = 0) -> Response:
+    from . import __version__
+    from .tuning_export import build_markdown
+    row = _session_or_404(session_id)
+    sd = _load_or_404(row)
+    md = build_markdown(sd, row, __version__)
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="{_safe(row["name"])}-tuning.md"'
+        )
+    return PlainTextResponse(md, media_type="text/markdown", headers=headers)
+
+
+@app.get("/api/sessions/{session_id}/laps.csv")
+async def session_laps_csv(session_id: int) -> Response:
+    from .tuning_export import build_laps_csv
+    row = _session_or_404(session_id)
+    sd = _load_or_404(row)
+    return PlainTextResponse(
+        build_laps_csv(sd),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{_safe(row["name"])}-laps.csv"'},
+    )
+
+
 @app.get("/api/sessions/{session_id}/download.csv")
 async def download_csv(session_id: int) -> Response:
     row = _session_or_404(session_id)
