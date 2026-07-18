@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.4] - 2026-07-18
+
+### Changed
+- **Auto-record now defaults to Off (manual)** — nothing is written until
+  the player presses ● Record. The mode selector lists Off first, then
+  Events, then Any driving. Existing installs keep whatever mode they had
+  chosen; installs that never touched the selector move to manual.
+
 ## [2.1.3] - 2026-07-18
 
 ### Fixed
@@ -129,6 +137,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.4]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.4
 [2.1.3]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.3
 [2.1.2]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.2
 [2.1.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.1

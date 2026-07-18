@@ -78,12 +78,13 @@ get identical 60 Hz data; nobody has to choose.
 The point of collecting all this data: getting concrete setup changes out of
 it.
 
-1. **Drive.** By default recording starts by itself when an **event**
-   begins (you're staged at a start line, or lap timing goes live) and ends
-   with the event — free roaming between events doesn't create sessions.
-   Prefer recording everything, or only what you start by hand? Switch the
-   mode on the Live page. **Free-roam time attacks are fully supported** —
-   the app recognises the staged start-line signature and times your runs.
+1. **Drive.** Recording is **manual by default** — press **● Record** on
+   the Live page when you want data (it still auto-stops after 30 s
+   stationary as a walk-away net). Prefer hands-off? Flip **Auto record**
+   to *Events* (arms when you stage at a start line or lap timing goes
+   live, ends with the event) or *Any driving*. **Free-roam time attacks
+   are fully supported** — the app recognises the staged start-line
+   signature and times your runs.
 2. Open **Sessions → Export** (or the Analysis page) and hit **"Copy
    tuning report for AI"** — it confirms with *"Copied! Paste into Claude
    or ChatGPT for analysis"*. The report contains your laps/runs, tyre
@@ -137,13 +138,14 @@ setup values you fill into the report.
   per-channel smoothing on noisy values, a drift-corrected lap clock, and
   pedal ribbons on the screen edges. Respects `prefers-reduced-motion`.
 - **Recording, three modes** (switchable on the Live page, remembered):
-  **Auto: events** (default) records when a timed event begins — staged at
-  a start line or lap timing live — and ends with the event; **Auto: any
-  driving** records whenever you move; **Manual** records only via
-  ● Record. Every session closes after 30 s stationary or in menus
-  (staging at a line doesn't count); ■ Stop is always instant. Raw frames
-  stored as portable CSV; metadata in SQLite. Rename, annotate, name your
-  cars, download — all from the phone.
+  **Manual** (default) records only when you press ● Record — nothing is
+  written until you ask; **Auto: events** records when a timed event
+  begins — staged at a start line or lap timing live — and ends with the
+  event; **Auto: any driving** records whenever you move. Every session
+  closes after 30 s stationary or in menus (staging at a line doesn't
+  count); ■ Stop is always instant. Raw frames stored as portable CSV;
+  metadata in SQLite. Rename, annotate, name your cars, download — all
+  from the phone.
 - **Laps & tuning stats** — per-lap tyre temps (°C) and front/rear balance,
   a drift-aware understeer index, per-axle slide times, wheelspin and
   brake-lock events, suspension travel and bottom-outs, shift RPM and
@@ -251,7 +253,7 @@ All configuration is via environment variables:
 | `FH6_HTTP_PORT` | `8080` | Dashboard/API port |
 | `FH6_PUSH_HZ` | `18` | Browser live-update rate (Hz) |
 | `FH6_SESSION_IDLE_TIMEOUT` | `30` | Auto-end session after N s of stream silence (menus) |
-| `FH6_RECORD_MODE` | `event` | Initial auto-record mode: `event` / `motion` / `manual` (UI setting overrides) |
+| `FH6_RECORD_MODE` | `manual` | Initial auto-record mode: `manual` / `event` / `motion` (UI setting overrides) |
 | `FH6_STATIONARY_TIMEOUT` | `30` | Auto-end any session after N s stationary (staging exempt) |
 | `FH6_KEEP_MIN_S` | `5` | Discard auto-recorded sessions shorter than this |
 | `FH6_MAX_DATA_MB` | `0` (off) | Optional cap: prune oldest disposable sessions past this size |

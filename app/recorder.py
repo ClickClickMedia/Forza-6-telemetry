@@ -90,7 +90,7 @@ class Recorder:
         sessions_dir: Path,
         idle_timeout_s: float = 30.0,
         raw_format: str = "csv",
-        record_mode: str = "event",
+        record_mode: str = "manual",
         stationary_timeout_s: float = 30.0,
         keep_min_s: float = 5.0,
         max_data_mb: float = 0.0,
@@ -100,7 +100,7 @@ class Recorder:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.idle_timeout_s = idle_timeout_s
         self.raw_format = raw_format if raw_format in ("csv", "parquet") else "csv"
-        self.record_mode = record_mode if record_mode in self.MODES else "event"
+        self.record_mode = record_mode if record_mode in self.MODES else "manual"
         self.stationary_timeout_s = stationary_timeout_s
         self.keep_min_s = keep_min_s
         self.max_data_mb = max_data_mb

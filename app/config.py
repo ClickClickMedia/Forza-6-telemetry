@@ -83,12 +83,12 @@ class Settings:
     session_idle_timeout_s: float = _env_float("FH6_SESSION_IDLE_TIMEOUT", 30.0)
     # Storage format for raw frames: "csv" or "parquet".
     raw_format: str = os.environ.get("FH6_RAW_FORMAT", "csv").lower()
-    # Recording mode: "event" starts recording when a timed event begins
-    # (staged at a start line or lap fields live) — the default, so free
-    # roaming between events doesn't pile up sessions; "motion" records any
-    # driving; "manual" records only via the ● Record button. Changeable
-    # from the Live page (persisted); this env sets the initial default.
-    record_mode: str = os.environ.get("FH6_RECORD_MODE", "event").lower()
+    # Recording mode: "manual" (default) records only via the ● Record
+    # button — nothing is written until the user asks; "event" starts when
+    # a timed event begins (staged at a start line or lap fields live);
+    # "motion" records any driving. Changeable from the Live page
+    # (persisted); this env sets the initial default.
+    record_mode: str = os.environ.get("FH6_RECORD_MODE", "manual").lower()
     # Every session (manual included) closes after this long stationary —
     # the walk-away net. Staging at a start line doesn't count as stationary.
     stationary_timeout_s: float = _env_float("FH6_STATIONARY_TIMEOUT", 30.0)
