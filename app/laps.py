@@ -391,9 +391,26 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
 
     moving = speed_ms > 3.0
     no_handbrake = handbrake < 0.1
-    wheelspin_g = _grouped_events(
-        (driven_slip > 0.5) & (accel > 0.4) & moving & no_handbrake, dt
-    )
+    spin_gate = (accel > 0.4) & moving & no_handbrake
+    wheelspin_g = _grouped_events((driven_slip > 0.5) & spin_gate, dt)
+
+    # Per-driven-wheel split — the FWD/AWD diff question hinges on it:
+    # one-wheel flare wants MORE diff lock, both-wheel spin wants less
+    # power or more tyre, not more lock.
+    spin_by_wheel = {
+        WHEELS[i]: round(float(np.sum(dt[(slip_ratio[i] > 0.5) & spin_gate])), 1)
+        for i in driven_idx
+    }
+    if len(driven_idx) >= 2:
+        both_mask = np.logical_and.reduce(
+            [slip_ratio[i] > 0.5 for i in driven_idx[:2]]
+        ) & spin_gate
+        spin_both = round(float(np.sum(dt[both_mask])), 1)
+    else:
+        spin_both = 0.0
+    turning = np.abs(steer) > 0.15
+    spin_turning = round(float(np.sum(dt[(driven_slip > 0.5) & spin_gate & turning])), 1)
+    spin_straight = round(float(np.sum(dt[(driven_slip > 0.5) & spin_gate & ~turning])), 1)
     lock_front_g = _grouped_events(
         ((slip_ratio[0] < -0.5) | (slip_ratio[1] < -0.5))
         & (brake > 0.6) & moving & no_handbrake, dt
@@ -513,6 +530,10 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "wheelspin_events": wheelspin_g["events"],
             "wheelspin_total_s": wheelspin_g["total_s"],
             "wheelspin_longest_s": wheelspin_g["longest_s"],
+            "wheelspin_by_wheel_s": spin_by_wheel,
+            "wheelspin_both_driven_s": spin_both,
+            "wheelspin_turning_s": spin_turning,
+            "wheelspin_straight_s": spin_straight,
             "brake_lock_events": lock_front_g["events"] + lock_rear_g["events"],
             "brake_lock_front_events": lock_front_g["events"],
             "brake_lock_front_s": lock_front_g["total_s"],

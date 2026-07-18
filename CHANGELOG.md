@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.2] - 2026-07-18
+
+### Added
+- **Per-wheel wheelspin split** (driven wheels only): time per wheel, time
+  with both driven wheels spinning together, and turning-vs-straight split
+  — the numbers that decide the FWD/AWD diff question (one-wheel flare →
+  more diff lock; both-wheel spin → less power or more tyre).
+- **Build-level signal**: a FWD session with sustained driven-wheel
+  wheelspin and high observed power gets an explicit note that the build,
+  not the tune, may be the limiter.
+
 ## [2.1.1] - 2026-07-18
 
 ### Fixed
@@ -106,6 +117,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.2]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.2
 [2.1.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.1
 [2.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.0
 [2.0.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.1

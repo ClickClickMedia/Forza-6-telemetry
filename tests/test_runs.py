@@ -162,6 +162,9 @@ def test_wheelspin_uses_driven_wheels_per_drivetrain():
     rep = lap_report(session_with(0, spin_front=True))
     assert rep["session"]["traction"]["driven_wheels"] == ["FL", "FR"]
     assert rep["session"]["traction"]["wheelspin_events"] >= 1
+    byw = rep["session"]["traction"]["wheelspin_by_wheel_s"]
+    assert set(byw) == {"FL", "FR"} and byw["FL"] > 0 and byw["FR"] > 0
+    assert rep["session"]["traction"]["wheelspin_both_driven_s"] > 0
     # FWD car with only REAR slip (trailing wheels) -> NOT wheelspin.
     rep = lap_report(session_with(0, spin_front=False))
     assert rep["session"]["traction"]["wheelspin_events"] == 0

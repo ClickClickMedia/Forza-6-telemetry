@@ -316,6 +316,24 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"{trac.get('wheelspin_total_s', 0):.1f} s total · "
         f"longest {trac.get('wheelspin_longest_s', 0):.1f} s "
         f"(grouped: ≥100 ms, 300 ms recovery gap)")
+    byw = trac.get("wheelspin_by_wheel_s") or {}
+    if byw and trac.get("wheelspin_total_s", 0) > 0:
+        add(f"- Wheelspin split: "
+            + " · ".join(f"{w} {s:.1f} s" for w, s in byw.items())
+            + f" · both driven wheels together {trac.get('wheelspin_both_driven_s', 0):.1f} s · "
+            f"while turning {trac.get('wheelspin_turning_s', 0):.1f} s / "
+            f"straight {trac.get('wheelspin_straight_s', 0):.1f} s "
+            f"(one-wheel flare → more diff lock; both-wheel spin → less "
+            f"power or more tyre, not more lock)")
+    if (trac.get("drivetrain") == "FWD"
+            and trac.get("wheelspin_total_s", 0) > 15
+            and (peaks.get("power_kw") or 0) > 250):
+        add(f"- **Build-level signal** *(estimated)*: "
+            f"{trac.get('wheelspin_total_s', 0):.0f} s of driven-wheel "
+            f"wheelspin with {peaks['power_kw']:.0f} kW observed through the "
+            f"front axle — the chassis/tyres may not be able to deploy this "
+            f"output. Worth asking whether tyre compound/width upgrades (or "
+            f"trading power away) fit the goal better than tune changes alone.")
     add(f"- Brake locks: front {trac.get('brake_lock_front_events', 0)} event(s) / "
         f"{trac.get('brake_lock_front_s', 0):.1f} s · rear "
         f"{trac.get('brake_lock_rear_events', 0)} event(s) / "
