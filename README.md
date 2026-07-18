@@ -118,6 +118,57 @@ Set `FH6_SYNTHETIC=0` again to go back to real telemetry.
 
 ---
 
+## Standalone Windows executable (no Docker)
+
+Prefer a double-click app over Docker? A single self-contained
+`fh6-telemetry.exe` is available — no Docker, no WSL, no Python install. It runs
+the exact same app, but binds **directly** to the host, which also avoids
+Docker Desktop's UDP NAT layer.
+
+### Getting the .exe
+
+The executable is built automatically by GitHub Actions on a Windows runner
+(`.github/workflows/build-windows-exe.yml`):
+
+- **Released builds:** push a version tag and a Release is published with the
+  exe attached:
+  ```bash
+  git tag v1.0.0 && git push origin v1.0.0
+  ```
+  Then download `fh6-telemetry.exe` from the repo's **Releases** page.
+- **Ad-hoc builds:** open the **Actions** tab → **Build Windows executable** →
+  **Run workflow**, then download the `fh6-telemetry-windows` artifact.
+- **Build it yourself** (needs Python 3.12 on Windows once):
+  ```powershell
+  pip install -r requirements-exe.txt
+  pyinstaller --clean --noconfirm fh6-telemetry.spec
+  # -> dist\fh6-telemetry.exe
+  ```
+
+### Running it
+
+1. Put `fh6-telemetry.exe` in a folder (recordings are saved to a `data\`
+   folder next to it).
+2. Double-click it. A console window opens and prints the URLs, e.g.:
+   ```
+   Dashboard (phone) : http://192.168.1.50:8080
+   Forza Data Out    : send UDP to 192.168.1.50 : 9876
+   ```
+3. Open the Windows firewall (once, admin PowerShell — same as the Docker path):
+   ```powershell
+   New-NetFirewallRule -DisplayName "FH6 Telemetry UDP" -Direction Inbound -Protocol UDP -LocalPort 9876 -Action Allow
+   New-NetFirewallRule -DisplayName "FH6 Dashboard TCP" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+   ```
+4. Set Forza's Data Out to that IP and port 9876 (see step 7 below), and open
+   the dashboard on your phone.
+
+Configuration uses the same `FH6_*` environment variables (e.g. set
+`FH6_SYNTHETIC=1` before launching to test without an Xbox). The exe uses **CSV**
+raw storage (the Parquet backend is Docker-only, to keep the binary small).
+Close the console window or press **Ctrl+C** for a graceful shutdown.
+
+---
+
 ## Running on Windows (Docker Desktop)
 
 Step-by-step for a Windows PC with **Docker Desktop** installed. Commands are

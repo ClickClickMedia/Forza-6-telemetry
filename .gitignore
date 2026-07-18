@@ -6,6 +6,11 @@ __pycache__/
 venv/
 *.egg-info/
 
+# PyInstaller build output
+/build/
+/dist/
+*.manifest
+
 # Runtime data (raw sessions + SQLite) — keep the directory, ignore contents.
 data/*
 !data/.gitkeep

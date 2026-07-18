@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -36,7 +37,20 @@ from .udp_receiver import UDPReceiver
 
 log = logging.getLogger("app")
 
-STATIC_DIR = Path(__file__).parent / "static"
+
+def _static_dir() -> Path:
+    """Locate the bundled ``static`` directory.
+
+    Under a PyInstaller build the data files are unpacked to ``sys._MEIPASS``;
+    from a normal source checkout they sit next to this module.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return base / "app" / "static"
+    return Path(__file__).parent / "static"
+
+
+STATIC_DIR = _static_dir()
 
 
 class AppState:

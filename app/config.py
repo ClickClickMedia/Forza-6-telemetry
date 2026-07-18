@@ -3,8 +3,30 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+
+def _is_frozen() -> bool:
+    """True when running as a PyInstaller-bundled executable."""
+    return getattr(sys, "frozen", False)
+
+
+def _default_data_dir() -> Path:
+    """Where to store SQLite + raw sessions when FH6_DATA_DIR is unset.
+
+    * Explicit ``FH6_DATA_DIR`` always wins (Docker Compose sets ``/app/data``).
+    * A bundled ``.exe`` writes to a ``data`` folder next to the executable, so
+      a portable install keeps its recordings alongside it.
+    * Otherwise (source checkout / container WORKDIR) use a relative ``data``.
+    """
+    env = os.environ.get("FH6_DATA_DIR")
+    if env:
+        return Path(env)
+    if _is_frozen():
+        return Path(sys.executable).resolve().parent / "data"
+    return Path("data")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -35,7 +57,7 @@ class Settings:
     push_hz: float = _env_float("FH6_PUSH_HZ", 18.0)
 
     # --- Recording --------------------------------------------------------
-    data_dir: Path = Path(os.environ.get("FH6_DATA_DIR", "/app/data"))
+    data_dir: Path = _default_data_dir()
     # Auto-end a session after this many seconds of silence.
     session_idle_timeout_s: float = _env_float("FH6_SESSION_IDLE_TIMEOUT", 5.0)
     # Storage format for raw frames: "csv" or "parquet".

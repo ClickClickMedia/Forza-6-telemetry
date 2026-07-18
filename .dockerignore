@@ -9,3 +9,6 @@ tests/
 .venv/
 venv/
 scratch/
+build/
+dist/
+.github/
