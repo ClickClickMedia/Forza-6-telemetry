@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.1] - 2026-07-18
+
+### Fixed
+- **Run route lengths are now physically consistent.** A real circuit
+  capture showed `DistanceTraveled` advancing ~2.9x faster than the car
+  moved, producing an impossible "12.1 km route in a 4.2 km session". Wire
+  distance is now used only for start/end boundary detection; route length
+  integrates speed over the run window.
+- Runs are no longer labelled "free-roam time attack" — some circuit event
+  types broadcast **no lap fields at all** (verified: LapNumber/CurrentLap/
+  LastLap/BestLap all zero for an entire 2-lap race), so a detected run may
+  be a full multi-lap race timed as one. The report says so, and per-lap
+  splitting for those events is tracked on the roadmap (#5).
+- **AWD setups now show the full differential set** — front accel/decel,
+  rear accel/decel, and centre balance — with the fields switching to match
+  the selected drivetrain (FWD: front only; RWD: rear only). Legacy saved
+  setups map their single diff pair onto the correct axle.
+
 ## [2.1.0] - 2026-07-18
 
 ### Added
@@ -88,6 +106,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.1
 [2.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.0
 [2.0.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.1
 [2.0.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.0

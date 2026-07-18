@@ -230,9 +230,11 @@
         <label class="field"><span>Aero F</span><input id="su_aero_f" type="text" inputmode="decimal"></label>
         <label class="field"><span>Aero R</span><input id="su_aero_r" type="text" inputmode="decimal"></label>
 
-        <div class="eyebrow full frm-section">Differential</div>
-        <label class="field"><span>Accel %</span><input id="su_diff_accel" type="text" inputmode="decimal"></label>
-        <label class="field"><span>Decel %</span><input id="su_diff_decel" type="text" inputmode="decimal"></label>
+        <div class="eyebrow full frm-section" id="secDiff">Differential</div>
+        <label class="field diff-front"><span>Front accel %</span><input id="su_diff_f_accel" type="text" inputmode="decimal"></label>
+        <label class="field diff-front"><span>Front decel %</span><input id="su_diff_f_decel" type="text" inputmode="decimal"></label>
+        <label class="field diff-rear"><span>Rear accel %</span><input id="su_diff_r_accel" type="text" inputmode="decimal"></label>
+        <label class="field diff-rear"><span>Rear decel %</span><input id="su_diff_r_decel" type="text" inputmode="decimal"></label>
         <label class="field full hidden" id="rowDiffCentre"><span>Centre balance % (AWD)</span>
           <input id="su_diff_centre" type="text" inputmode="decimal"></label>
 
@@ -358,7 +360,7 @@
       card.classList.remove("hidden");
       if (rep.has_runs) {
         document.getElementById("lapsNote").textContent =
-          "detected free-roam time-attack runs (from the route's start-line signature)";
+          "timed runs from event staging — the game sends no lap data for this event type";
       } else if (!rep.has_laps) {
         document.getElementById("lapsNote").textContent = "free roam — whole session as one stint";
       } else {
@@ -536,7 +538,8 @@
       "final", "gears", "camber_f", "camber_r", "toe_f", "toe_r", "caster",
       "arb_f", "arb_r", "spring_f", "spring_r", "ride_f", "ride_r",
       "reb_f", "reb_r", "bump_f", "bump_r", "aero_f", "aero_r",
-      "diff_accel", "diff_decel", "diff_centre", "brake_bal", "brake_pres"];
+      "diff_f_accel", "diff_f_decel", "diff_r_accel", "diff_r_decel",
+      "diff_centre", "brake_bal", "brake_pres"];
     const DRIVE_NAME = { 0: "FWD", 1: "RWD", 2: "AWD" };
     let curMeta = {};
     let curDrive = "";
@@ -547,6 +550,14 @@
       curDrive = v || "";
       document.querySelectorAll("#suDrive .btn").forEach((b) =>
         b.classList.toggle("on", b.dataset.v === curDrive));
+      // Forza's diff screen depends on the drivetrain: FWD tunes a front
+      // diff, RWD a rear diff, AWD both plus a centre balance.
+      const front = curDrive === "FWD" || curDrive === "AWD" || curDrive === "";
+      const rear = curDrive === "RWD" || curDrive === "AWD" || curDrive === "";
+      document.querySelectorAll(".diff-front").forEach((el) =>
+        el.classList.toggle("hidden", !front));
+      document.querySelectorAll(".diff-rear").forEach((el) =>
+        el.classList.toggle("hidden", !rear));
       document.getElementById("rowDiffCentre")
         .classList.toggle("hidden", curDrive !== "AWD");
     }
@@ -555,6 +566,13 @@
 
     function fillForm(data) {
       data = data || {};
+      // Legacy setups (pre-2.1.1) stored a single diff pair — map it onto
+      // the axle Forza actually tunes for that drivetrain.
+      if (data.diff_accel && !data.diff_f_accel && !data.diff_r_accel) {
+        const rear = (data.drivetrain || "") === "RWD";
+        data[rear ? "diff_r_accel" : "diff_f_accel"] = data.diff_accel;
+        data[rear ? "diff_r_decel" : "diff_f_decel"] = data.diff_decel || "";
+      }
       SETUP_KEYS.forEach((k) => { const el = suEl(k); if (el) el.value = data[k] || ""; });
       document.getElementById("su_label").value = "";
       setDrive(data.drivetrain || curDrive);

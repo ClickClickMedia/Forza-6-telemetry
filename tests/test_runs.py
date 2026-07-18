@@ -38,7 +38,9 @@ def test_detect_runs_from_distance_signature():
     runs = detect_runs(sd)
     assert len(runs) == 1
     run = runs[0]
-    assert run["route_m"] > 10_000
+    # Route is integrated from speed (wire distance is untrustworthy).
+    total = float(np.sum(sd.col("Speed") * sd.dt()))
+    assert 0 < run["route_m"] <= total + 1
     assert run["time_s"] > 60
     rep = lap_report(sd)
     assert rep["has_runs"] and not rep["has_laps"]
@@ -63,9 +65,31 @@ def test_detect_runs_staged_at_zero_variant():
         sd.columns[col] = np.zeros(n)
     runs = detect_runs(sd)
     assert len(runs) == 1
-    assert runs[0]["route_m"] > 5000
+    assert runs[0]["route_m"] > 2000
     rep = lap_report(sd)
     assert rep["has_runs"]
+
+
+def test_run_route_ignores_inflated_wire_distance():
+    """Real circuit capture: DistanceTraveled advanced ~2.9x faster than the
+    car moved. Route must come from speed integration, boundaries from
+    distance — never distance magnitude."""
+    sd = _synthetic_session(seconds=120.0, hz=30.0)
+    n = sd.n
+    q = n // 10
+    real = np.cumsum(sd.columns["Speed"] * (1 / 30))
+    dist = 3.0 * real                                # inflated wire value
+    dist[:q] = 0.0                                   # staged hold
+    dist[9 * q:] = 0.0                               # snap at event end
+    sd.columns["DistanceTraveled"] = dist
+    for col in ("LapNumber", "CurrentLap", "BestLap", "LastLap"):
+        sd.columns[col] = np.zeros(n)
+    runs = detect_runs(sd)
+    assert len(runs) == 1
+    run = runs[0]
+    window_real = float(real[9 * q - 1] - real[run["i0"]])
+    assert abs(run["route_m"] - window_real) < window_real * 0.05, \
+        "route must track real driven distance, not the inflated wire value"
 
 
 def test_plain_free_roam_detects_no_runs():

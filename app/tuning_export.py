@@ -116,7 +116,9 @@ SETUP_FIELDS = [
     ("reb_f", "Rebound damping F"), ("reb_r", "Rebound damping R"),
     ("bump_f", "Bump damping F"), ("bump_r", "Bump damping R"),
     ("aero_f", "Aero F"), ("aero_r", "Aero R"),
-    ("diff_accel", "Diff acceleration"), ("diff_decel", "Diff deceleration"),
+    ("diff_f_accel", "Front diff acceleration"), ("diff_f_decel", "Front diff deceleration"),
+    ("diff_r_accel", "Rear diff acceleration"), ("diff_r_decel", "Rear diff deceleration"),
+    ("diff_accel", "Diff acceleration"), ("diff_decel", "Diff deceleration"),  # legacy
     ("diff_centre", "Diff centre balance"),
     ("brake_bal", "Brake balance"), ("brake_pres", "Brake pressure"),
 ]
@@ -218,10 +220,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     if rep["has_laps"]:
         add(f"- Laps completed: {n_complete} · Best lap: **{_fmt_lap_time(best)}**")
     elif rep.get("has_runs"):
-        add(f"- Free-roam time-attack: **{n_complete} detected run(s)** · "
-            f"best run: **{_fmt_lap_time(best)}** *(estimated: runs detected "
-            f"from the staged negative→zero DistanceTraveled signature; the "
-            f"game exposes no official timer for these events)*")
+        add(f"- Staged event with **no lap data on the wire**: "
+            f"**{n_complete} timed run(s)** · best **{_fmt_lap_time(best)}** "
+            f"*(estimated from the start-line staging signature — Horizon "
+            f"sends no lap fields for this event type. If this was a "
+            f"multi-lap circuit, the time covers the full race; per-lap "
+            f"splitting for such events is on the roadmap)*")
     else:
         add("- Free roam / point-to-point (no lap markers in this session)")
     add(f"- Max speed: {session.get('speed', {}).get('max_kmh', 0):.0f} km/h *(telemetry)*")
@@ -352,7 +356,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
 
     if (rep["has_laps"] or rep.get("has_runs")) and rep["laps"]:
-        add("## Runs (detected free-roam time attack)" if rep.get("has_runs")
+        add("## Timed runs (detected from event staging)" if rep.get("has_runs")
             else "## Laps")
         add("")
         rows = []

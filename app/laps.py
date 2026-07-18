@@ -171,11 +171,17 @@ def detect_runs(sd: SessionData) -> List[Dict[str, Any]]:
     d = np.diff(dist)
     boundaries = sorted(np.where(d < RUN_SNAP_DROP_M)[0] + 1)
 
+    # DistanceTraveled is used ONLY for boundary detection (staging and the
+    # end-of-event snap). Its magnitude is not trustworthy as route length —
+    # a real circuit capture showed it advancing ~2.9x faster than the car
+    # actually moved — so route length is integrated from speed instead.
+    speed_dt = sd.col("Speed") * sd.dt()
+
     runs: List[Dict[str, Any]] = []
 
     def _emit(start: int, end: int) -> None:
         duration = float(t[end - 1] - t[start])
-        route = float(np.max(dist[start:end])) if end > start else 0.0
+        route = float(np.sum(speed_dt[start:end])) if end > start else 0.0
         if duration >= RUN_MIN_S and route >= RUN_MIN_ROUTE_M:
             runs.append({"i0": int(start), "i1": int(end),
                          "time_s": round(duration, 3),
