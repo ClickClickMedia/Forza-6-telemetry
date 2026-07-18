@@ -63,6 +63,19 @@ from typing import Any, Dict, List, Tuple
 #: rejected by the receiver.
 FH6_PACKET_SIZE = 324
 
+#: Sanity ceiling for lap-time fields (seconds). In free roam FH6 has been
+#: observed emitting garbage/sentinel values in ``BestLap``/``LastLap``
+#: (e.g. 388328.3 s ≈ 4.5 days in real captures); anything at or above this
+#: bound is treated as "no lap time" by every consumer.
+SANE_LAP_MAX_S = 10_800.0
+
+
+def sane_lap(seconds: float) -> float:
+    """Return ``seconds`` if it is a plausible lap time, else 0.0."""
+    if seconds and 0.0 < seconds < SANE_LAP_MAX_S:
+        return seconds
+    return 0.0
+
 # ---------------------------------------------------------------------------
 # Field table
 # ---------------------------------------------------------------------------
@@ -434,9 +447,9 @@ class TelemetryFrame:
             "torque_nm": round(self.torque_nm, 1),
             "boost_bar": round(self.boost_bar, 2),
             "boost_psi": round(self.boost_psi, 2),
-            "cur_lap": round(self.CurrentLap, 3),
-            "last_lap": round(self.LastLap, 3),
-            "best_lap": round(self.BestLap, 3),
+            "cur_lap": round(sane_lap(self.CurrentLap), 3),
+            "last_lap": round(sane_lap(self.LastLap), 3),
+            "best_lap": round(sane_lap(self.BestLap), 3),
             "lap_number": int(self.LapNumber),
             "race_position": int(self.RacePosition),
             "race_time": round(self.CurrentRaceTime, 3),

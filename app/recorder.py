@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .database import Database
-from .packet import FIELD_NAMES, TelemetryFrame
+from .packet import FIELD_NAMES, TelemetryFrame, sane_lap
 
 log = logging.getLogger(__name__)
 
@@ -233,9 +233,10 @@ class Recorder:
         active.drivetrain = int(frame.DrivetrainType)
         active.cylinders = int(frame.NumCylinders)
         active.car_group = int(frame.CarGroup)
-        if frame.BestLap and frame.BestLap > 0:
-            if active.best_lap is None or frame.BestLap < active.best_lap:
-                active.best_lap = float(frame.BestLap)
+        best = sane_lap(frame.BestLap)
+        if best > 0:
+            if active.best_lap is None or best < active.best_lap:
+                active.best_lap = float(best)
 
     def _csv_writer_loop(self, active: _ActiveSession) -> None:
         """Dedicated thread: drain the queue into a CSV file."""

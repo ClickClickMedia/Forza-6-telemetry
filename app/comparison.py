@@ -42,8 +42,9 @@ def _run_time(sd: SessionData) -> float:
     Uses the packet BestLap if a valid lap exists (circuit racing); otherwise
     falls back to total elapsed capture time (point-to-point runs).
     """
+    from .packet import SANE_LAP_MAX_S
     best = sd.col("BestLap")
-    valid = best[best > 0]
+    valid = best[(best > 0) & (best < SANE_LAP_MAX_S)]
     if valid.size:
         return float(np.min(valid))
     t = sd.col("t_mono")

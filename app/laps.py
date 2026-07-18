@@ -114,14 +114,16 @@ def _lap_time(sd: SessionData, seg: Dict[str, Any]) -> Optional[float]:
     the *next* frames; ``CurrentLap`` at the last in-segment frame is the
     fallback (slightly short by up to one frame interval).
     """
+    from .packet import sane_lap
+
     i1 = seg["i1"]
     if seg["complete"] and i1 < sd.n:
-        last_lap = float(sd.col("LastLap")[min(i1 + 2, sd.n - 1)])
+        last_lap = sane_lap(float(sd.col("LastLap")[min(i1 + 2, sd.n - 1)]))
         if last_lap > 0:
             return last_lap
     cur = sd.col("CurrentLap")[seg["i0"]:i1]
     if cur.size:
-        t = float(np.max(cur))
+        t = sane_lap(float(np.max(cur)))
         if t > 0:
             return t
     return None

@@ -125,9 +125,10 @@ def rescue_csv(path: Path, backup: bool = True) -> Dict[str, Any]:
             moving += 1
             if abs(frame.Speed - vmag) < _VALIDATE_TOL_MS:
                 passed += 1
-        if frame.BestLap and frame.BestLap > 0:
-            if best_lap is None or frame.BestLap < best_lap:
-                best_lap = float(frame.BestLap)
+        best = packet.sane_lap(frame.BestLap)
+        if best > 0:
+            if best_lap is None or best < best_lap:
+                best_lap = float(best)
 
         d = frame.as_dict()
         t_mono = row[idx["t_mono"]] if "t_mono" in idx else ""

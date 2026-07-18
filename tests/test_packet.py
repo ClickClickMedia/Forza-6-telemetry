@@ -238,6 +238,20 @@ def test_live_payload_shape():
     assert len(payload["susp_norm"]) == 4
 
 
+def test_bogus_free_roam_lap_sentinels_are_capped():
+    # Real FH6 captures show free roam emitting garbage lap values
+    # (e.g. BestLap 388328.3 s). live_payload must treat them as "no time".
+    values = {name: 0 for name in FIELD_NAMES}
+    values.update({"BestLap": 388328.3, "LastLap": 546439.4, "CurrentLap": 91.5})
+    payload = parse(pack(values)).live_payload()
+    assert payload["best_lap"] == 0.0
+    assert payload["last_lap"] == 0.0
+    assert payload["cur_lap"] == 91.5  # plausible values pass through
+    assert packet.sane_lap(0.0) == 0.0
+    assert packet.sane_lap(85.3) == 85.3
+    assert packet.sane_lap(packet.SANE_LAP_MAX_S) == 0.0
+
+
 def test_tire_temp_fahrenheit_to_celsius():
     values = {name: 0 for name in FIELD_NAMES}
     values.update({

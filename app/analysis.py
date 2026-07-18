@@ -219,8 +219,10 @@ def analyse(sd: SessionData) -> Dict[str, Any]:
     }
 
     # --- Lap summary (best from packet field, laps observed) ----------
+    # Horizon emits garbage sentinel lap values in free roam; cap them.
+    from .packet import SANE_LAP_MAX_S
     best_lap = sd.col("BestLap")
-    best = best_lap[best_lap > 0]
+    best = best_lap[(best_lap > 0) & (best_lap < SANE_LAP_MAX_S)]
     out["laps"] = {
         "best_lap_s": round(float(np.min(best)), 3) if best.size else None,
         "lap_count": int(np.max(sd.col("LapNumber"))) if sd.n else 0,
