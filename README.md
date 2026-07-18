@@ -118,6 +118,151 @@ Set `FH6_SYNTHETIC=0` again to go back to real telemetry.
 
 ---
 
+## Running on Windows (Docker Desktop)
+
+Step-by-step for a Windows PC with **Docker Desktop** installed. Commands are
+shown for **PowerShell**; notes call out where **WSL** differs. This assumes
+Docker Desktop is running (the default WSL2 backend is fine).
+
+### 1. Verify Docker is ready
+
+```powershell
+docker version
+docker compose version
+```
+
+Both should print versions with no error. If `docker` isn't found, start
+**Docker Desktop** and wait for the whale icon to report "running".
+
+### 2. Get the code
+
+```powershell
+cd $HOME
+git clone https://github.com/ClickClickMedia/Forza-6-telemetry.git
+cd Forza-6-telemetry
+```
+
+> **WSL:** identical, but clone into the Linux filesystem (`~/`) rather than
+> `/mnt/c/...` for much faster bind-mount performance.
+
+### 3. Build and start
+
+```powershell
+docker compose up -d --build
+```
+
+The first build takes a few minutes. When it finishes:
+
+```powershell
+docker compose ps                                  # should show "running"
+Invoke-RestMethod http://localhost:8080/health     # PowerShell-friendly
+```
+
+You should see `status : ok` and `packet_size : 324`.
+
+> **WSL / cmd:** use `curl http://localhost:8080/health` instead of
+> `Invoke-RestMethod`.
+
+### 4. Test it works — before touching the Xbox
+
+Run the built-in synthetic generator to confirm the dashboard end-to-end. Drop
+a small override file into the project folder:
+
+```powershell
+@'
+services:
+  fh6-telemetry:
+    environment:
+      FH6_SYNTHETIC: "1"
+'@ | Set-Content docker-compose.override.yml
+
+docker compose up -d          # picks up the override automatically
+```
+
+Open **http://localhost:8080** in your PC browser — you should see a car
+lapping. Check `/debug` too: it should show `received size 324`.
+
+When you're ready for real telemetry, remove the override and restart:
+
+```powershell
+Remove-Item docker-compose.override.yml
+docker compose up -d
+```
+
+### 5. Find your PC's LAN IP (for the phone and Xbox)
+
+```powershell
+ipconfig
+```
+
+Under your active **Wi-Fi** (or Ethernet) adapter, read the **IPv4 Address**,
+e.g. `192.168.1.50` — that's your `<HOST-IP>`.
+
+> With Docker Desktop the published ports live on the **Windows host IP** — use
+> this address, not any `172.x` WSL/Docker address.
+
+### 6. Open the Windows firewall
+
+Run PowerShell **as Administrator**:
+
+```powershell
+New-NetFirewallRule -DisplayName "FH6 Telemetry UDP" -Direction Inbound -Protocol UDP -LocalPort 9876 -Action Allow
+New-NetFirewallRule -DisplayName "FH6 Dashboard TCP" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+```
+
+If Windows prompts that "Docker Desktop Backend wants to accept connections",
+click **Allow**.
+
+### 7. Turn on Data Out in Forza Horizon 6
+
+On the Xbox (or the PC running FH6):
+
+1. **Settings → HUD and Gameplay → Data Out** → **ON**
+2. **Data Out IP Address** → your `<HOST-IP>` from step 5.
+   (If FH6 runs on the **same PC** as Docker, use `127.0.0.1`.)
+3. **Data Out IP Port** → **9876**
+
+The Xbox and PC must be on the **same Wi-Fi/LAN**.
+
+### 8. Confirm packets are arriving
+
+Start driving, then on the PC:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/api/status | ConvertTo-Json -Depth 5
+```
+
+Under `receiver`, `pps` should be **> 0** and `connected : True`.
+
+### 9. Open the dashboard on your phone
+
+On a phone on the **same Wi-Fi**, browse to `http://<HOST-IP>:8080` (e.g.
+`http://192.168.1.50:8080`), then use **"Add to Home Screen"** to install the
+PWA. Rotate to landscape for the full dashboard.
+
+### Handy commands
+
+```powershell
+docker compose logs -f            # live logs (Ctrl+C to stop viewing)
+docker compose restart            # restart the app
+docker compose down               # stop and remove the container
+docker compose up -d --build      # rebuild after pulling code changes
+```
+
+### Windows troubleshooting
+
+- **`pps` stays 0 with Data Out on** → wrong IP in FH6, missing firewall rule,
+  or the devices are on a **guest network / "AP isolation"** that blocks
+  device-to-device traffic. Put everything on the same normal Wi-Fi.
+- **Phone can't load `:8080`** → confirm the TCP firewall rule and that you're
+  using the PC's LAN IP, not `localhost`.
+- **`/debug` shows a size other than 324** → a different Forza title is
+  sending; this build is FH6-only by design.
+- **Port already in use** → change the `ports:` mapping in
+  `docker-compose.yml` (e.g. `8081:8080`) and use that port from the phone.
+
+---
+
 ## Firewall notes
 
 The Docker host must allow **inbound UDP 9876** (from the Xbox) and **inbound
