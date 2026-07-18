@@ -5,11 +5,14 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![No cloud](https://img.shields.io/badge/cloud-none-informational.svg)
 
-A self-hosted telemetry collector and **mobile dashboard** for **Forza Horizon
-6**. It listens for Forza's "Data Out" UDP stream, parses every field of the
-**324-byte FH6 packet**, shows a live dashboard on your phone, records sessions
-to disk, and analyses/compares runs — all on your own Wi-Fi, with **no cloud and
-no external dependencies**.
+A self-hosted telemetry collector and **mobile pit instrument** for **Forza
+Horizon 6**. It listens for Forza's "Data Out" UDP stream, parses every field
+of the **324-byte FH6 packet** (layout validated against the real game), shows
+a live dashboard on your phone, records every session to disk, breaks them
+into **laps with tuning-grade stats**, and exports an **AI-ready tuning
+report** you can paste straight into Claude or ChatGPT — or let Claude query
+directly over **MCP**. All on your own Wi-Fi, **no cloud, no external
+dependencies**.
 
 Runs two ways: as a **Docker container**, or as a **single double-click
 `.exe`** on Windows (no Python, no Docker). There's also a built-in **synthetic
@@ -19,6 +22,16 @@ generator**, so you can try the whole thing right now without a console.
 Xbox / PC  ──UDP 9876──▶  collector  ──HTTP/WebSocket 8080──▶  Phone (same Wi-Fi)
 (Data Out)               (this app)                            (dashboard PWA)
 ```
+
+| Live (phone) | Landscape mount | Analysis |
+| --- | --- | --- |
+| ![Live dashboard on a phone](docs/screenshots/live-phone.png) | ![Landscape instrument mode](docs/screenshots/live-landscape.png) | ![Session analysis](docs/screenshots/analysis-phone.png) |
+
+The live view is built like an instrument, not a website: huge tabular
+numerals that never shift layout, tyre pods coloured by the **temperature
+window** (blue cold → green in-window → amber hot → red over), and the
+signature **edge pedal ribbons** — brake on the left edge of the screen,
+throttle on the right — readable in peripheral vision while you drive.
 
 ### 🎮 Just want to run it? (Windows)
 
@@ -45,22 +58,90 @@ Xbox / PC  ──UDP 9876──▶  collector  ──HTTP/WebSocket 8080──�
   [the packet section](#the-fh6-packet-324-bytes)), and never crashes on
   malformed input. Tracks packets/sec, invalid/dropped packets and last-packet
   time.
-- **Live mobile dashboard** — dark theme, large readouts, landscape mode,
-  installable PWA, auto-reconnecting WebSocket, Wake Lock support. Browser is
-  updated at ~18 Hz (configurable) rather than every game frame.
+- **Live pit instrument** — installable PWA with portrait, landscape-mount
+  and desktop layouts, auto-reconnecting WebSocket, Wake Lock. Built for
+  glanceability: fixed-width tabular numerals (zero layout shift), per-channel
+  EMA smoothing on noisy values (tyre temps settle over ~1 s instead of
+  strobing), a drift-corrected lap clock that ticks smoothly between packets,
+  and pedal ribbons on the screen edges. Respects `prefers-reduced-motion`.
 - **Recording** — auto-starts a session when `IsRaceOn` becomes 1, auto-ends
   after 5 s of silence, plus manual Start/Stop/Marker controls. Raw frames are
   stored with monotonic receive timestamps as CSV (or Parquet). Session
-  metadata in SQLite. Rename sessions and download CSV from the phone.
-- **Analysis** — per-session speed, acceleration, throttle/brake time, gear
-  usage, shift RPM, tyre temps and slip time, and detected events (wheelspin,
-  brake lock, bottom-out, over/understeer candidates, and more).
-- **Comparison** — overlay two sessions' channels and draw an XY route trace
-  from `PositionX`/`PositionZ`, coloured by speed or rear slip. Works for
-  point-to-point runs (no `TrackOrdinal` assumed — FH6 has none).
+  metadata in SQLite. Rename, annotate, and download everything from the phone.
+- **Laps & tuning stats** — sessions are segmented into laps with the numbers
+  a tuner actually reads: tyre temps (°C) per corner with front/rear balance,
+  a drift-aware **understeer index** (opposite-lock frames excluded), slide
+  times per axle, wheelspin/brake-lock events, suspension travel usage and
+  bottom-outs, shift RPM and time-on-limiter.
+- **AI tuning export** — one tap copies a Markdown tuning report (car, laps,
+  verdicts, a fill-in section for your current setup, and an analysis prompt)
+  ready to paste into **Claude** or **ChatGPT**; or download `.md` / per-lap
+  `.csv` / raw `.csv`.
+- **MCP server** — `python -m app.mcp_server` (or `fh6-telemetry.exe --mcp`)
+  lets Claude Desktop / Claude Code query your sessions and tuning reports
+  directly. See [Connect Claude](#connect-claude-mcp).
+- **Analysis & comparison** — per-session analysis with balance/temperature
+  verdict cards, route trace coloured by speed or rear slip, gear usage, event
+  detection; two-session channel overlay and route comparison.
 - **Operations** — `/health` and `/api/status` endpoints, structured JSON
-  logging, graceful shutdown, a packet-debug page, and a synthetic telemetry
-  generator so you can test everything without an Xbox.
+  logging, graceful shutdown, a packet-debug page with a live physics
+  cross-check (`Speed` vs `|Velocity|`), automatic **v1.0.x recording
+  rescue**, and a synthetic telemetry generator so you can test everything
+  without an Xbox.
+
+---
+
+## Tune your car with AI
+
+The point of collecting all this data: getting concrete setup changes out of
+it. The workflow:
+
+1. **Drive.** Laps in an event give the richest data (lap times populate);
+   free roam works too. Recording is automatic.
+2. Open **Sessions → Export → "Copy tuning report"** (or the same button on
+   the Analysis page). You get a Markdown report with your laps, tyre temps,
+   balance verdict, traction events, suspension usage and gearing — plus a
+   fill-in block for your current setup values (telemetry can't see spring
+   rates or pressures) and an analysis prompt.
+3. **Paste it into Claude or ChatGPT.** The prompt tells the model exactly
+   how to read the numbers and to propose changes within Forza's tuning
+   screen (pressures, gearing, alignment, ARBs, springs, damping, aero,
+   diff, brakes).
+4. Apply the tune, drive again, and **Compare** the two sessions.
+
+The verdicts (understeer/oversteer, temperature window) are computed from
+grip-driving frames only — sustained drifting and opposite-lock moments are
+excluded and reported separately, so a skid-pan session doesn't read as
+"understeer". Thresholds live in [`app/laps.py`](app/laps.py) as documented
+constants; calibration PRs welcome.
+
+### Connect Claude (MCP)
+
+Instead of copy-paste, let Claude read your telemetry directly. With the
+collector running:
+
+**Claude Code:**
+
+```bash
+claude mcp add fh6-telemetry -- python -m app.mcp_server
+```
+
+**Claude Desktop** (`claude_desktop_config.json`) — works with the Windows
+exe, no Python needed:
+
+```json
+"fh6-telemetry": {
+  "command": "C:\\path\\to\\fh6-telemetry.exe",
+  "args": ["--mcp"],
+  "env": { "FH6_URL": "http://127.0.0.1:8080" }
+}
+```
+
+Then ask: *"List my FH6 sessions"*, *"Pull the tuning report for my latest
+session and suggest setup changes"*, *"Is the game connected right now?"*
+Tools exposed: `get_live_status`, `list_sessions`, `get_session_laps`,
+`get_tuning_report`, `get_session_analysis`. The MCP server is a thin
+read-only proxy over the local HTTP API — it never modifies your data.
 
 ---
 
@@ -430,6 +511,9 @@ usually means a firewall or wrong IP/port.
 | PATCH | `/api/sessions/{id}` | Rename / edit notes |
 | DELETE | `/api/sessions/{id}` | Delete session + raw file |
 | GET | `/api/sessions/{id}/analysis` | Full analysis |
+| GET | `/api/sessions/{id}/laps` | Lap breakdown + tuning aggregates + verdicts |
+| GET | `/api/sessions/{id}/tuning.md` | AI-ready Markdown tuning report (`?download=1` to save) |
+| GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |
 | GET | `/api/sessions/{id}/route?colour_by=speed\|rear_slip` | Route trace |
 | GET | `/api/sessions/{id}/download.csv` | Download raw CSV |
 | POST | `/api/recording/start` \| `/stop` \| `/marker` | Manual recording control |

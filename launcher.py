@@ -18,6 +18,7 @@ in the README; sensible defaults apply when they are unset.
 from __future__ import annotations
 
 import socket
+import sys
 
 import uvicorn
 
@@ -61,6 +62,14 @@ def _banner() -> None:
 
 
 def main() -> None:
+    if "--mcp" in sys.argv:
+        # MCP stdio mode: expose the running dashboard's data to Claude
+        # (Desktop/Code). Point FH6_URL at the dashboard if not default.
+        # No banner, no server — stdout belongs to the MCP protocol.
+        from app.mcp_server import main as mcp_main
+        mcp_main()
+        return
+
     _banner()
     configure(settings.log_level, settings.log_json)
     # Import the app object directly (rather than an "app.main:app" string):
