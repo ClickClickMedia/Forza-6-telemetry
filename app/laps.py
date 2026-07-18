@@ -397,44 +397,67 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
     moving = speed_ms > 3.0
     no_handbrake = handbrake < 0.1
     spin_gate = (accel > 0.4) & moving & no_handbrake
-    wheelspin_g = _grouped_events((driven_slip > 0.5) & spin_gate, dt)
+    any_spin = (driven_slip > 0.5) & spin_gate
+    wheelspin_g = _grouped_events(any_spin, dt)
 
-    # Per-driven-wheel split — the FWD/AWD diff question hinges on it:
-    # one-wheel flare wants MORE diff lock, both-wheel spin wants less
-    # power or more tyre, not more lock.
+    # Wheelspin buckets are MUTUALLY EXCLUSIVE raw-mask times so they
+    # reconcile exactly: sum(per-wheel-only) + multiple == total, and
+    # turning + straight == total. (Grouped values are kept only for the
+    # burst count/longest.) The diff question hinges on the split:
+    # one-wheel flare wants MORE diff lock; all-wheel spin wants less
+    # power or more tyre.
+    spin_total = round(float(np.sum(dt[any_spin])), 1)
+    wheel_spin_masks = {i: (slip_ratio[i] > 0.5) & spin_gate for i in driven_idx}
+    n_spinning = np.zeros(speed_ms.size, dtype=int)
+    for m in wheel_spin_masks.values():
+        n_spinning += m.astype(int)
     spin_by_wheel = {
-        WHEELS[i]: round(float(np.sum(dt[(slip_ratio[i] > 0.5) & spin_gate])), 1)
+        WHEELS[i]: round(float(np.sum(dt[wheel_spin_masks[i] & (n_spinning == 1)])), 1)
         for i in driven_idx
     }
-    if len(driven_idx) >= 2:
-        both_mask = np.logical_and.reduce(
-            [slip_ratio[i] > 0.5 for i in driven_idx[:2]]
-        ) & spin_gate
-        spin_both = round(float(np.sum(dt[both_mask])), 1)
-    else:
-        spin_both = 0.0
+    spin_multi = round(float(np.sum(dt[any_spin & (n_spinning >= 2)])), 1)
     turning = np.abs(steer) > 0.15
-    spin_turning = round(float(np.sum(dt[(driven_slip > 0.5) & spin_gate & turning])), 1)
-    spin_straight = round(float(np.sum(dt[(driven_slip > 0.5) & spin_gate & ~turning])), 1)
-    lock_front_g = _grouped_events(
-        ((slip_ratio[0] < -0.5) | (slip_ratio[1] < -0.5))
-        & (brake > 0.6) & moving & no_handbrake, dt
-    )
-    lock_rear_g = _grouped_events(
-        ((slip_ratio[2] < -0.5) | (slip_ratio[3] < -0.5))
-        & (brake > 0.6) & moving & no_handbrake, dt
-    )
+    spin_turning = round(float(np.sum(dt[any_spin & turning])), 1)
+    spin_straight = round(float(np.sum(dt[any_spin & ~turning])), 1)
+
+    # Brake lock via WHEEL-SPEED DEFICIT — the honest detector. Forza's
+    # normalized slip ratio crosses -0.5 during ordinary hard braking with
+    # no lockup (verified: a session with 5-6 s of slip<-0.5 showed 0.0 s
+    # of actual wheel-stoppage), so slip thresholds massively over-count.
+    # Per-wheel rolling constant k = rot/speed calibrated on free-rolling
+    # frames; lock = wheel turning at <40% of expected for the road speed.
+    wheel_rot = _wheel_cols(sd, "WheelRotationSpeed")
+    wheel_rot = [w[sl] for w in wheel_rot]
+    free_roll = (brake < 0.05) & (accel < 0.05) & (speed_ms > 8.0)
     braking_time_s = float(np.sum(dt[brake >= BRAKING_MIN]))
-    # Percentage uses the UNION of locked time (front+rear summed would
-    # double-count moments when both axles lock at once).
-    lock_any_g = _grouped_events(
-        ((slip_ratio[0] < -0.5) | (slip_ratio[1] < -0.5)
-         | (slip_ratio[2] < -0.5) | (slip_ratio[3] < -0.5))
-        & (brake > 0.6) & moving & no_handbrake, dt
-    )
+    lock_masks: List[np.ndarray] = []
+    lock_method = "wheel-speed deficit"
+    if int(np.sum(free_roll)) >= 50:
+        for w in wheel_rot:
+            k = float(np.median(w[free_roll] / speed_ms[free_roll]))
+            expected = k * np.maximum(speed_ms, 0.1)
+            deficit = 1.0 - (w / expected)
+            lock_masks.append(
+                (deficit > 0.6) & (brake > 0.3) & (speed_ms > 5.0) & no_handbrake
+            )
+    else:  # not enough coasting to calibrate — legacy approximation
+        lock_method = "slip-ratio approximation (insufficient coasting to calibrate)"
+        for r in slip_ratio:
+            lock_masks.append((r < -0.9) & (brake > 0.6) & moving & no_handbrake)
+    lock_front_mask = lock_masks[0] | lock_masks[1]
+    lock_rear_mask = lock_masks[2] | lock_masks[3]
+    lock_front_g = _grouped_events(lock_front_mask, dt)
+    lock_rear_g = _grouped_events(lock_rear_mask, dt)
+    lock_any_raw = round(float(np.sum(dt[lock_front_mask | lock_rear_mask])), 2)
     lock_pct_of_braking = round(
-        min(100.0, lock_any_g["total_s"] / braking_time_s * 100.0), 1
+        min(100.0, lock_any_raw / braking_time_s * 100.0), 1
     ) if braking_time_s > 0.5 else 0.0
+
+    # Channels the game broadcasts identically (e.g. rear tyre temps on
+    # many cars) — worth disclosing so nobody chases a phantom asymmetry.
+    rear_temps_identical = bool(np.mean(
+        sd.col("TireTempRearLeft")[sl] == sd.col("TireTempRearRight")[sl]
+    ) > 0.995) if i1 > i0 else False
 
     max_travel = np.maximum.reduce([s for s in susp])
     bottom_mask = max_travel > SUSP_BOTTOM_OUT
@@ -533,10 +556,10 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "driven_slip_peak": round(float(np.max(driven_slip)) if driven_slip.size else 0.0, 2),
             "driven_slip_p95": round(float(np.percentile(driven_slip, 95)) if driven_slip.size else 0.0, 2),
             "wheelspin_events": wheelspin_g["events"],
-            "wheelspin_total_s": wheelspin_g["total_s"],
+            "wheelspin_total_s": spin_total,
             "wheelspin_longest_s": wheelspin_g["longest_s"],
             "wheelspin_by_wheel_s": spin_by_wheel,
-            "wheelspin_both_driven_s": spin_both,
+            "wheelspin_multi_s": spin_multi,
             "wheelspin_turning_s": spin_turning,
             "wheelspin_straight_s": spin_straight,
             "brake_lock_events": lock_front_g["events"] + lock_rear_g["events"],
@@ -544,8 +567,10 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "brake_lock_front_s": lock_front_g["total_s"],
             "brake_lock_rear_events": lock_rear_g["events"],
             "brake_lock_rear_s": lock_rear_g["total_s"],
+            "brake_lock_method": lock_method,
             "braking_time_s": round(braking_time_s, 1),
             "lock_pct_of_braking": lock_pct_of_braking,
+            "rear_temps_wire_identical": rear_temps_identical,
         },
         "observed_peaks": {
             "power_kw": peak_power_kw,

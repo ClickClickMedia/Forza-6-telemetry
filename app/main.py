@@ -434,6 +434,11 @@ async def create_setup(body: SetupBody) -> Dict[str, Any]:
     label = (body.label or "").strip()
     if not label:
         label = f"v{st.db.count_setups(body.car_ordinal) + 1}"
+    # One identity store: a setup that names the car also registers it, so
+    # reports and session lists pick it up without a second step.
+    car_text = str((body.data or {}).get("car_text") or "").strip()
+    if car_text and not st.db.get_car_name(body.car_ordinal):
+        st.db.set_car_name(body.car_ordinal, car_text)
     sid = st.db.add_setup(
         body.car_ordinal, label,
         datetime.now(timezone.utc).isoformat(),

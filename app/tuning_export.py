@@ -140,6 +140,15 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
     if filled:
         add("")
         add(_md_table(["Setting", "Value"], [[l, v] for l, v in filled]))
+    # Core settings a tuner will miss if absent — say so explicitly rather
+    # than leaving the AI to guess whether they were omitted or don't exist.
+    core = ["tp_f", "tp_r", "camber_f", "camber_r", "toe_f", "toe_r",
+            "arb_f", "arb_r", "spring_f", "spring_r", "aero_f", "aero_r"]
+    labels = dict((k, l) for k, l in SETUP_FIELDS)
+    missing = [labels[k] for k in core if not str(data.get(k) or "").strip()]
+    if missing:
+        add("")
+        add(f"- Not provided: {', '.join(missing)}")
     if data.get("goal"):
         add("")
         add(f"- **What I want:** {data['goal']}")
@@ -192,6 +201,9 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("## Car")
     add("")
     car_name = (meta.get("car_name") or "").strip()
+    setup_car = str(((setup or {}).get("data") or {}).get("car_text") or "").strip()
+    if not car_name and setup_car:
+        car_name = setup_car  # the saved setup already knows the car
     if car_name:
         add(f"- Car: **{car_name}** (Forza ordinal {meta.get('car_ordinal', '?')}) "
             f"*(name user-entered/community; ordinal from telemetry)*")
@@ -230,8 +242,9 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         add("- Free roam / point-to-point (no lap markers in this session)")
     add(f"- Max speed: {session.get('speed', {}).get('max_kmh', 0):.0f} km/h *(telemetry)*")
     add(f"- Sustained cornering grip: **{session.get('lat_g_sustained', 0):.2f} g** "
-        f"(best lateral-G held 0.4 s while steering at speed — the "
-        f"tuning-grade number) · frame p99 {session.get('lat_g_p99', 0):.2f} g · "
+        f"(best lateral-G held 0.4 s while steering at speed; spikes and "
+        f"airborne excluded — banking and compressions may still "
+        f"contribute) · frame p99 {session.get('lat_g_p99', 0):.2f} g · "
         f"raw single-frame max {session.get('max_lat_g', 0):.2f} g — raw max "
         f"excluded from handling analysis (collisions/kerbs/landings)")
     notes = (meta.get("notes") or "").strip()
@@ -252,6 +265,11 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
     add("- Averages/medians use **active-driving frames only** (≥40 km/h) — "
         "stationary and cool-down time excluded.")
+    if session.get("traction", {}).get("rear_temps_wire_identical"):
+        add("- Note: the game broadcasts **identical rear-left and rear-right "
+            "temperatures** for this car (verified at the packet level) — "
+            "Forza models the rear axle jointly here; it is not a sensor or "
+            "parser fault.")
     window = temps.get("window_c", [77, 99])
     add(f"- Working window used for verdicts: {window[0]:.0f}–{window[1]:.0f} °C — "
         f"a generic road-racing heuristic (community optimal 88–99 °C, usable "
@@ -318,12 +336,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"(grouped: ≥100 ms, 300 ms recovery gap)")
     byw = trac.get("wheelspin_by_wheel_s") or {}
     if byw and trac.get("wheelspin_total_s", 0) > 0:
-        add(f"- Wheelspin split: "
-            + " · ".join(f"{w} {s:.1f} s" for w, s in byw.items())
-            + f" · both driven wheels together {trac.get('wheelspin_both_driven_s', 0):.1f} s · "
+        add(f"- Wheelspin split (mutually exclusive; buckets sum to the total): "
+            + " · ".join(f"{w} only {s:.1f} s" for w, s in byw.items())
+            + f" · multiple driven wheels {trac.get('wheelspin_multi_s', 0):.1f} s — "
             f"while turning {trac.get('wheelspin_turning_s', 0):.1f} s / "
             f"straight {trac.get('wheelspin_straight_s', 0):.1f} s "
-            f"(one-wheel flare → more diff lock; both-wheel spin → less "
+            f"(one-wheel flare → more diff lock; all-wheel spin → less "
             f"power or more tyre, not more lock)")
     if (trac.get("drivetrain") == "FWD"
             and trac.get("wheelspin_total_s", 0) > 15
@@ -334,7 +352,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             f"front axle — the chassis/tyres may not be able to deploy this "
             f"output. Worth asking whether tyre compound/width upgrades (or "
             f"trading power away) fit the goal better than tune changes alone.")
-    add(f"- Brake locks: front {trac.get('brake_lock_front_events', 0)} event(s) / "
+    add(f"- Brake locks *(detector: {trac.get('brake_lock_method', 'wheel-speed deficit')})*: "
+        f"front {trac.get('brake_lock_front_events', 0)} event(s) / "
         f"{trac.get('brake_lock_front_s', 0):.1f} s · rear "
         f"{trac.get('brake_lock_rear_events', 0)} event(s) / "
         f"{trac.get('brake_lock_rear_s', 0):.1f} s · "

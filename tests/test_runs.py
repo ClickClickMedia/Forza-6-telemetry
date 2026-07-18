@@ -161,13 +161,19 @@ def test_wheelspin_uses_driven_wheels_per_drivetrain():
             sd.columns[f"TireSlipRatio{w}"] = zero if spin_front else spin
         return sd
 
-    # FWD car with FRONT slip -> wheelspin detected.
+    # FWD car with FRONT slip -> wheelspin detected. Both wheels spin
+    # together, so exclusive per-wheel buckets are 0 and 'multiple' carries
+    # the time; buckets must reconcile with the total exactly.
     rep = lap_report(session_with(0, spin_front=True))
-    assert rep["session"]["traction"]["driven_wheels"] == ["FL", "FR"]
-    assert rep["session"]["traction"]["wheelspin_events"] >= 1
-    byw = rep["session"]["traction"]["wheelspin_by_wheel_s"]
-    assert set(byw) == {"FL", "FR"} and byw["FL"] > 0 and byw["FR"] > 0
-    assert rep["session"]["traction"]["wheelspin_both_driven_s"] > 0
+    trac = rep["session"]["traction"]
+    assert trac["driven_wheels"] == ["FL", "FR"]
+    assert trac["wheelspin_events"] >= 1
+    byw = trac["wheelspin_by_wheel_s"]
+    assert set(byw) == {"FL", "FR"}
+    assert trac["wheelspin_multi_s"] > 0
+    total = trac["wheelspin_total_s"]
+    assert abs(sum(byw.values()) + trac["wheelspin_multi_s"] - total) < 0.2
+    assert abs(trac["wheelspin_turning_s"] + trac["wheelspin_straight_s"] - total) < 0.2
     # FWD car with only REAR slip (trailing wheels) -> NOT wheelspin.
     rep = lap_report(session_with(0, spin_front=False))
     assert rep["session"]["traction"]["wheelspin_events"] == 0
@@ -175,6 +181,40 @@ def test_wheelspin_uses_driven_wheels_per_drivetrain():
     rep = lap_report(session_with(1, spin_front=False))
     assert rep["session"]["traction"]["driven_wheels"] == ["RL", "RR"]
     assert rep["session"]["traction"]["wheelspin_events"] >= 1
+
+
+def test_brake_lock_requires_wheel_stoppage_not_just_slip():
+    """Forza's normalized slip crosses -0.5 in ordinary hard braking with
+    zero lockup (verified on a real capture). Lock detection must key on
+    the wheel actually stopping relative to road speed."""
+    sd = _synthetic_session(seconds=60.0, hz=30.0)
+    n = sd.n
+    speed = np.full(n, 30.0)
+    sd.columns["Speed"] = speed
+    k = 3.0
+    rot = k * speed.copy()
+    brake = np.zeros(n)
+    slip = np.zeros(n)
+    q = n // 6
+    # Coasting for calibration (first third), then two braking phases.
+    sd.columns["Accel"] = np.zeros(n)
+    sd.columns["Brake"] = brake
+    # Phase A: hard braking, deep slip ratio, wheels STILL TURNING.
+    brake[2 * q:3 * q] = 255.0
+    slip[2 * q:3 * q] = -0.9
+    # Phase B: hard braking, wheels genuinely stopped (rot -> 5% expected).
+    brake[4 * q:5 * q] = 255.0
+    rot[4 * q:5 * q] = 0.05 * k * 30.0
+    sd.columns["Brake"] = brake
+    for w in ("FrontLeft", "FrontRight", "RearLeft", "RearRight"):
+        sd.columns[f"TireSlipRatio{w}"] = slip
+        sd.columns[f"WheelRotationSpeed{w}"] = rot
+    sd.columns["HandBrake"] = np.zeros(n)
+    trac = lap_report(sd)["session"]["traction"]
+    assert trac["brake_lock_method"] == "wheel-speed deficit"
+    # Only phase B (~10 s) counts; phase A's slip excursion must not.
+    front_s = trac["brake_lock_front_s"]
+    assert 8.0 < front_s < 12.0, front_s
 
 
 def test_observed_peaks_ignore_partial_throttle():

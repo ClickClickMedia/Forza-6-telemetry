@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.6] - 2026-07-18
+
+### Fixed
+- **Brake-lock detection rebuilt on wheel-speed deficit** (wheel rotation
+  vs road speed, per-wheel calibrated on coasting frames). Forza's
+  normalized slip ratio crosses -0.5 during ordinary hard braking with no
+  lockup — verified on a real capture where the old detector reported
+  5-6 s of "lock" and the wheels never stopped. Real sessions drop from
+  "84% of braking" to honest fractions; the detector name is printed
+  beside the number.
+- **Wheelspin buckets are now mutually exclusive and reconcile exactly**:
+  per-wheel-only + multiple-wheels = total, turning + straight = total
+  (previously mixed gap-merged and raw durations).
+- A setup that names the car now **registers the car name automatically**
+  — reports and session lists pick it up with no separate "name car" step,
+  and the report uses the setup's car identity instead of asking the AI to
+  ask.
+
+### Added
+- Setup export lists core settings left blank as "Not provided".
+- When the game broadcasts identical rear tyre temperatures (verified at
+  packet level on multiple cars — Forza models some rear axles jointly),
+  the report says so instead of leaving a suspicious symmetry.
+- Sustained-grip wording notes banking/compressions may contribute.
+
 ## [2.1.5] - 2026-07-18
 
 ### Fixed
@@ -145,6 +170,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.6]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.6
 [2.1.5]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.5
 [2.1.4]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.4
 [2.1.3]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.3
