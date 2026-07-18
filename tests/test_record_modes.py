@@ -107,6 +107,21 @@ def test_manual_session_honours_stationary_timeout(tmp_path: Path):
     db.close()
 
 
+def test_event_mode_ignores_drive_past_entry_points(tmp_path: Path):
+    """Driving past a race entry point previews its route: negative
+    DistanceTraveled at road speed. That must NOT start a session."""
+    db, rec = _rec(tmp_path, "event")
+    t = time.monotonic()
+    for _ in range(180):  # 3 s cruising past the marker at 144 km/h
+        rec.feed(_frame(IsRaceOn=1, Speed=40, DistanceTraveled=-120.0), t)
+        t += 1 / 60
+    assert rec.active_session_id is None
+    # Now actually stop on the grid at negative distance -> session opens.
+    rec.feed(_frame(IsRaceOn=1, Speed=0, DistanceTraveled=-120.0), t)
+    assert rec.active_session_id is not None
+    db.close()
+
+
 def test_manual_mode_never_autostarts(tmp_path: Path):
     db, rec = _rec(tmp_path, "manual")
     t = time.monotonic()

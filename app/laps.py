@@ -190,13 +190,18 @@ def detect_runs(sd: SessionData) -> List[Dict[str, Any]]:
     # Variant 1 — staged behind the line: a contiguous negative-distance
     # span dipping below -50 m; the run starts where the span ends (the
     # start-line crossing — distance climbs gradually through 0, so the
-    # frame before crossing may be only -3 m).
+    # frame before crossing may be only -3 m). The span must contain a
+    # near-stationary moment: driving PAST an event entry point also sends
+    # negative distance (route preview), but at road speed.
+    speed_col = sd.col("Speed")
     covered: List[int] = []
     for s, e in _mask_spans(dist < 0):
         if e >= sd.n:
             continue
         if float(np.min(dist[s:e])) > -50.0:
             continue  # jitter around zero, not a staged start
+        if float(np.min(speed_col[s:e])) > 3.0:
+            continue  # drove past an entry point — never actually staged
         start = e
         after = [b for b in boundaries if b > start]
         end = after[0] if after else sd.n

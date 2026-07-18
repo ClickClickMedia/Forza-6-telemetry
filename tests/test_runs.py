@@ -26,6 +26,9 @@ def _with_run_signature(sd: SessionData) -> SessionData:
     dist[2 * q + 60: 8 * q] = np.linspace(0, 15000, run_len)   # the run
     dist[8 * q:] = np.linspace(0, 300, n - 8 * q)          # snap reset + roam
     sd.columns["DistanceTraveled"] = dist
+    # Staged = stationary (as in every real capture); required since the
+    # drive-past guard demands a near-zero-speed moment in the span.
+    sd.columns["Speed"][2 * q: 2 * q + 60] = 0.0
     sd.columns["LapNumber"] = np.zeros(n)
     sd.columns["CurrentLap"] = np.zeros(n)
     sd.columns["BestLap"] = np.zeros(n)

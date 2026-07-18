@@ -152,13 +152,20 @@ class Recorder:
                 self._last_moving_mono = t_mono
 
             # Event-staging signals: distance pinned to ~0 while stopped
-            # (route time attacks) or deep negative (grid starts).
+            # (route time attacks) or negative while stopped (grid starts).
+            # The speed gate matters: merely driving PAST an event entry
+            # point makes the game preview that event's route and push
+            # DistanceTraveled negative — at road speed. A genuinely staged
+            # car is stationary; every validated capture agrees.
             dist = float(frame.DistanceTraveled)
             if abs(dist) < 0.5 and frame.Speed < 1.0:
                 self._zero_hold += 1
             else:
                 self._zero_hold = 0
-            staging = dist < -5.0 or self._zero_hold >= self.ZERO_HOLD_FRAMES
+            staging = (
+                (dist < -5.0 and frame.Speed < 3.0)
+                or self._zero_hold >= self.ZERO_HOLD_FRAMES
+            )
             in_event = race_on == 1 and (
                 frame.CurrentLap > 0 or frame.LapNumber > 0 or staging
             )

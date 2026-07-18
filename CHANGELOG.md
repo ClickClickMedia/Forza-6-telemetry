@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.3] - 2026-07-18
+
+### Fixed
+- **Event-mode recording no longer triggers from driving past event entry
+  points** (race markers, speed traps, drift zones). Passing one makes the
+  game preview that event's route — pushing `DistanceTraveled` negative at
+  road speed — which looked like grid staging. Staging now also requires
+  the car to be near-stationary, matching every validated capture; the
+  analysis-side run detector applies the same guard so drive-pasts can't
+  produce phantom runs. All four real reference captures still detect
+  their runs correctly.
+
 ## [2.1.2] - 2026-07-18
 
 ### Added
@@ -117,6 +129,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.3]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.3
 [2.1.2]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.2
 [2.1.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.1
 [2.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.0
