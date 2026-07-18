@@ -20,6 +20,11 @@ Xbox / PC  ──UDP 9876──▶  collector  ──HTTP/WebSocket 8080──�
 (Data Out)               (this app)                            (dashboard PWA)
 ```
 
+### 🎮 Just want to run it? (Windows)
+
+**[⬇️ Download fh6-telemetry.exe](https://github.com/ClickClickMedia/Forza-6-telemetry/releases/latest/download/fh6-telemetry.exe)** — one file, double-click, done. No Docker, no Python, no install.
+→ Full steps: **[Download & run (Windows)](#download-and-run-on-windows-easiest)**.
+
 > ### 📡 Help validate the FH6 packet layout
 >
 > This parser is built to the FH6 "Data Out" layout described below (324 bytes;
@@ -87,7 +92,12 @@ explicit endianness unit tests before this is relied upon.
 
 ---
 
-## Quick start
+## Quick start (Docker)
+
+> **On Windows and just want it running?** Grab the
+> **[.exe](#download-and-run-on-windows-easiest)** instead — no Docker needed. This
+> section is the container path (great for Linux or a home server). Step 1 below
+> (enabling Data Out) applies either way.
 
 ### 1. Enable Data Out on the Xbox / PC
 
@@ -139,58 +149,74 @@ Set `FH6_SYNTHETIC=0` again to go back to real telemetry.
 
 ---
 
-## Standalone Windows executable (no Docker)
+## Download and run on Windows (easiest)
 
-Prefer a double-click app over Docker? A single self-contained
-`fh6-telemetry.exe` is available — no Docker, no WSL, no Python install. It runs
-the exact same app, but binds **directly** to the host, which also avoids
-Docker Desktop's UDP NAT layer.
+**[⬇️ Download fh6-telemetry.exe](https://github.com/ClickClickMedia/Forza-6-telemetry/releases/latest/download/fh6-telemetry.exe)**
+&nbsp; *(from the latest [Release](https://github.com/ClickClickMedia/Forza-6-telemetry/releases))*
 
-### Getting the .exe
+This is a **single self-contained file** — the server and dashboard are bundled
+inside it. You do **not** need Docker, Python, or WSL. Just download and run.
 
-The executable is built automatically by GitHub Actions on a Windows runner
-(`.github/workflows/build-windows-exe.yml`):
+1. **Download** `fh6-telemetry.exe` (link above) and put it in its own folder,
+   e.g. `Documents\FH6`. Recordings are saved to a `data\` folder next to it.
+2. **Double-click it.** Windows may show a blue *"Windows protected your PC"*
+   box because the app isn't code-signed — click **More info → Run anyway**.
+   (It's open source; you can read every line in this repo.)
+3. A **console window** opens and prints your addresses, e.g.:
+   ```
+   Dashboard (phone) : http://192.168.1.50:8080
+   Forza Data Out    : send UDP to 192.168.1.50 : 9876
+   ```
+4. If Windows pops up a **firewall prompt**, tick **Private networks** and click
+   **Allow access**. (No prompt? Open the ports once — see
+   [Firewall notes](#firewall-notes).)
+5. In **Forza Horizon 6**: **Settings → HUD and Gameplay → Data Out → ON**, set
+   the **IP** to the address the console printed, and **Port** to **9876**.
+6. On your **phone** (same Wi-Fi), open `http://<that-ip>:8080`. Drive, and the
+   dashboard comes alive. Use **Add to Home Screen** to install it as an app.
 
-- **Released builds:** push a version tag and a Release is published with the
-  exe attached:
-  ```bash
-  git tag v1.0.0 && git push origin v1.0.0
-  ```
-  Then download `fh6-telemetry.exe` from the repo's **Releases** page.
-- **Ad-hoc builds:** open the **Actions** tab → **Build Windows executable** →
-  **Run workflow**, then download the `fh6-telemetry-windows` artifact.
-- **Build it yourself** (needs Python 3.12 on Windows once):
+To **stop**, close the console window (it shuts down cleanly). Recordings stay in
+the `data\` folder for next time.
+
+> **Try it without an Xbox first (optional):** open **PowerShell** in the exe's
+> folder and run:
+> ```powershell
+> $env:FH6_SYNTHETIC = "1"; .\fh6-telemetry.exe
+> ```
+> A simulated car will drive the dashboard so you can see everything working.
+> Close the window and double-click normally when you're ready for real data.
+
+<details>
+<summary>Other ways to get the exe (build it yourself, or an ad-hoc CI build)</summary>
+
+The exe is built automatically on a Windows runner by GitHub Actions
+(`.github/workflows/build-windows-exe.yml`).
+
+- **Ad-hoc build without a Release:** open the **Actions** tab → **Build Windows
+  executable** → **Run workflow**, then download the `fh6-telemetry-windows`
+  artifact (a zip containing the exe).
+- **Build it locally** (needs Python 3.12 on Windows once):
   ```powershell
   pip install -r requirements-exe.txt
   pyinstaller --clean --noconfirm fh6-telemetry.spec
   # -> dist\fh6-telemetry.exe
   ```
 
-### Running it
-
-1. Put `fh6-telemetry.exe` in a folder (recordings are saved to a `data\`
-   folder next to it).
-2. Double-click it. A console window opens and prints the URLs, e.g.:
-   ```
-   Dashboard (phone) : http://192.168.1.50:8080
-   Forza Data Out    : send UDP to 192.168.1.50 : 9876
-   ```
-3. Open the Windows firewall (once, admin PowerShell — same as the Docker path):
-   ```powershell
-   New-NetFirewallRule -DisplayName "FH6 Telemetry UDP" -Direction Inbound -Protocol UDP -LocalPort 9876 -Action Allow
-   New-NetFirewallRule -DisplayName "FH6 Dashboard TCP" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
-   ```
-4. Set Forza's Data Out to that IP and port 9876 (see step 7 below), and open
-   the dashboard on your phone.
-
-Configuration uses the same `FH6_*` environment variables (e.g. set
-`FH6_SYNTHETIC=1` before launching to test without an Xbox). The exe uses **CSV**
-raw storage (the Parquet backend is Docker-only, to keep the binary small).
-Close the console window or press **Ctrl+C** for a graceful shutdown.
+The exe uses **CSV** raw storage (the optional Parquet backend is Docker-only,
+to keep the binary small) and honours the same `FH6_*`
+[environment variables](#configuration).
+</details>
 
 ---
 
-## Running on Windows (Docker Desktop)
+## Alternative: run with Docker
+
+> Most Windows users should use the **[.exe above](#download-and-run-on-windows-easiest)** —
+> it's simpler and needs nothing installed. Docker is handy if you're on
+> **Linux**, already run containers, or want the Parquet storage backend. It
+> runs the exact same app.
+
+### Docker on Windows (Docker Desktop)
 
 Step-by-step for a Windows PC with **Docker Desktop** installed. Commands are
 shown for **PowerShell**; notes call out where **WSL** differs. This assumes
