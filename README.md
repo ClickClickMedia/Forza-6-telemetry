@@ -15,9 +15,13 @@ with tuning-grade stats**, and exports a report you can paste straight into
 **Claude or ChatGPT** for setup advice. Everything stays on your own Wi-Fi —
 **no cloud, no account, no subscription**.
 
-| Live (phone) | Landscape mount | Analysis |
+| Live · on the phone | Session analysis | Laps & route |
 | --- | --- | --- |
-| ![Live dashboard on a phone](docs/screenshots/live-phone.png) | ![Landscape instrument mode](docs/screenshots/live-landscape.png) | ![Session analysis](docs/screenshots/analysis-phone.png) |
+| ![Live dashboard on a phone — tyre pods, RPM, pedal ribbons](docs/images/live-dashboard.jpg) | ![Session analysis — named car, best lap, balance and tyre verdicts](docs/images/analysis-session.jpg) | ![Lap splits and the speed-coloured route map](docs/images/analysis-laps-route.jpg) |
+
+*Real screenshots from a phone on the sofa — a drift session with the rears
+cooked at 126 °C, and a 3-lap race the game sent no lap data for, timed
+anyway by detecting start-line returns.*
 
 The live view is built like an instrument, not a website: huge numerals that
 never shift layout, tyre pods coloured by the **temperature window** (blue
@@ -94,6 +98,23 @@ it.
 3. **The AI proposes changes** within Forza's tuning screen: pressures,
    gearing, alignment, anti-roll bars, springs, damping, aero, diff, brakes.
 4. Apply the tune, drive again, and **Compare** the two sessions.
+
+### The loop in action
+
+Real ChatGPT replies from one evening of tuning a RWD drift truck with
+reports copied straight out of this app:
+
+| One precise change per test | Honest about what "worse" means |
+| --- | --- |
+| ![ChatGPT reads the per-wheel wheelspin split and proposes a single diff change](docs/images/chatgpt-diff-test.jpg) | ![ChatGPT explains why the car feels loose but is faster, from slide times and corner-phase balance](docs/images/chatgpt-why-faster.jpg) |
+
+The left reply reads the report's **per-wheel wheelspin split** (RL-only
+59.5 s vs RR-only 47.0 s vs both-rears 24.6 s — one wheel flaring, not the
+axle overwhelmed) and proposes exactly one change to test. The right one
+uses **slide times, axle temperatures and corner-phase balance** to explain
+why a tune that *feels* looser is genuinely faster — and tells the driver
+to keep it. That's the level of reasoning the export's labelled,
+provenance-marked data makes possible.
 
 The verdicts (understeer/oversteer, temperature window) are computed from
 grip-driving frames only — sustained drifting and opposite-lock moments are
