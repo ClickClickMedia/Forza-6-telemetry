@@ -58,9 +58,10 @@ All notable changes to this project are documented here. The format is based on
 - Synthetic generator now emits Fahrenheit tyre temps (as the real game does)
   and the corrected packet field set.
 
-## [1.0.0] - 2026-07-18
+## 1.0.0 - 2026-07-18
 
-Initial release.
+Initial release. (Superseded by 1.1.0 — its packet layout corrupted
+recorded dash-tail fields; 1.1.0 rescues those recordings automatically.)
 
 ### Added
 - FH6 "Data Out" UDP receiver (asyncio `DatagramProtocol`) bound to
@@ -83,5 +84,4 @@ Initial release.
 - Packaging: `Dockerfile` + `docker-compose.yml`, and a standalone Windows
   executable built via PyInstaller in GitHub Actions.
 
-[1.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v1.0.0
+[1.1.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v1.1.0
