@@ -231,6 +231,100 @@ def detect_runs(sd: SessionData) -> List[Dict[str, Any]]:
     return runs
 
 
+# Position-gate lap splitting: a staged run that repeatedly returns to its
+# own start point travelling the same direction is a circuit, and those
+# returns are the lap boundaries. Position is continuous truth — unlike
+# DistanceTraveled it survives rewinds, which snap distance and falsely
+# split a race into "runs". Validated on a real 3-lap race capture: four
+# start-line passes within 4.5 m / same heading / 211–218 km/h.
+GATE_RADIUS_M = 25.0          # start-line capture radius
+GATE_HEADING_DOT = 0.5        # ±60° of the launch direction
+GATE_MIN_SPEED = 8.0          # m/s — must be driving through, not staged
+GATE_COOLDOWN_ROUTE_M = 500.0  # min route between line crossings
+LAP_ROUTE_RATIO_MAX = 1.25    # complete laps must be this consistent
+PARTIAL_MIN_FRACTION = 0.3    # trailing remainder worth reporting as partial
+
+
+def detect_position_laps(sd: SessionData,
+                         runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Split staged runs into laps at returns to the start point.
+
+    Returns [] unless the trajectory shows >= 2 consistent complete loops —
+    a point-to-point run never re-crosses its start and is left untouched.
+    """
+    if not runs:
+        return []
+    px, pz = sd.col("PositionX"), sd.col("PositionZ")
+    speed = sd.col("Speed")
+    t = sd.col("t_mono")
+    route = np.cumsum(speed * sd.dt())
+
+    i0, end = runs[0]["i0"], runs[-1]["i1"]
+    gx, gz = float(px[i0]), float(pz[i0])
+
+    # Launch heading: displacement over the first ~25 m of the run (frame
+    # deltas are too noisy; standing starts need the car to move first).
+    j = i0
+    while j < end - 1 and route[j] - route[i0] < 25.0:
+        j += 1
+    hx, hz = float(px[j] - px[i0]), float(pz[j] - pz[i0])
+    norm = float(np.hypot(hx, hz))
+    if norm < 1.0:
+        return []
+    hx, hz = hx / norm, hz / norm
+
+    # Per-frame heading over a ~0.5 s forward window, compared to launch.
+    w = 30
+    fx = np.empty(sd.n)
+    fz = np.empty(sd.n)
+    fx[:-w], fz[:-w] = px[w:] - px[:-w], pz[w:] - pz[:-w]
+    fx[-w:], fz[-w:] = fx[-w - 1], fz[-w - 1]
+    fnorm = np.hypot(fx, fz)
+    dot = (fx * hx + fz * hz) / np.maximum(fnorm, 1e-9)
+
+    near = (np.hypot(px - gx, pz - gz) < GATE_RADIUS_M)
+    ok = near & (dot > GATE_HEADING_DOT) & (speed > GATE_MIN_SPEED) \
+        & (fnorm > 1.0)
+    ok[:i0] = False
+    ok[end:] = False
+
+    crossings = [i0]
+    dist_gate = np.hypot(px - gx, pz - gz)
+    for s, e in _mask_spans(ok):
+        c = int(s + np.argmin(dist_gate[s:e]))
+        if route[c] - route[crossings[-1]] >= GATE_COOLDOWN_ROUTE_M:
+            crossings.append(c)
+    if len(crossings) < 3:  # need >= 2 complete loops to call it a circuit
+        return []
+
+    laps: List[Dict[str, Any]] = []
+    for a, b in zip(crossings, crossings[1:]):
+        laps.append({
+            "i0": a, "i1": b,
+            "time_s": round(float(t[b] - t[a]), 3),
+            "route_m": round(float(route[b] - route[a]), 1),
+            "complete": True,
+        })
+    routes = [l["route_m"] for l in laps]
+    if min(routes) < RUN_MIN_ROUTE_M or any(
+            l["time_s"] < MIN_LAP_S for l in laps):
+        return []
+    if max(routes) / max(min(routes), 1.0) > LAP_ROUTE_RATIO_MAX:
+        return []  # inconsistent loop lengths — not the same circuit
+
+    # Trailing remainder after the last crossing: a real partial lap, or
+    # just the few frames between the finish line and the event snap.
+    remainder = float(route[end - 1] - route[crossings[-1]])
+    if remainder > PARTIAL_MIN_FRACTION * float(np.median(routes)):
+        laps.append({
+            "i0": crossings[-1], "i1": end,
+            "time_s": round(float(t[end - 1] - t[crossings[-1]]), 3),
+            "route_m": round(remainder, 1),
+            "complete": False,
+        })
+    return laps
+
+
 def _pct(mask: np.ndarray, dt: np.ndarray) -> float:
     total = float(np.sum(dt))
     if total <= 0:
@@ -668,6 +762,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
 
     laps: List[Dict[str, Any]] = []
     has_runs = False
+    lap_source = "wire" if has_laps else None
     if has_laps:
         for seg in segments:
             stats = _slice_stats(sd, seg["i0"], seg["i1"])
@@ -686,7 +781,23 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
         # No lap markers — look for free-roam time-attack runs (staged
         # negative DistanceTraveled crossing 0 at launch).
         runs = detect_runs(sd)
-        if runs:
+        pos_laps = detect_position_laps(sd, runs)
+        if pos_laps:
+            # The run returned to its own start point repeatedly: a circuit.
+            # These splits beat the run detector — position survives the
+            # rewinds and mid-race snaps that break DistanceTraveled.
+            has_laps = True
+            lap_source = "position-gate"
+            for n, pl in enumerate(pos_laps, start=1):
+                stats = _slice_stats(sd, pl["i0"], pl["i1"])
+                laps.append({
+                    "lap": n,
+                    "complete": pl["complete"],
+                    "time_s": pl["time_s"],
+                    "route_m": pl["route_m"],
+                    **stats,
+                })
+        elif runs:
             has_runs = True
             for n, run in enumerate(runs, start=1):
                 stats = _slice_stats(sd, run["i0"], run["i1"])
@@ -732,6 +843,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
     return {
         "has_laps": has_laps,
         "has_runs": has_runs,
+        "lap_source": lap_source,
         "laps": laps,
         "best_lap_s": round(min(complete_times), 3) if complete_times else None,
         "session": session_stats,

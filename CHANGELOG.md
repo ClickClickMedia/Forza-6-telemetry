@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.9] - 2026-07-18
+
+### Added
+- **Real lap times for circuit events that broadcast no lap data.** When a
+  staged run repeatedly returns to its own start point travelling the same
+  direction, those returns are start-line crossings and the report now
+  splits the event into laps (times, routes and full per-lap analytics).
+  Validated on a real 3-lap race: the two "runs" the old detector showed
+  (split by a mid-race rewind snapping DistanceTraveled) became laps of
+  1:36.547 / 1:48.860 / 1:36.125 — position is continuous truth, so
+  rewinds cannot break the splits. Point-to-point runs are untouched;
+  loop-length consistency is required before any split is trusted.
+
 ## [2.1.8] - 2026-07-18
 
 ### Added

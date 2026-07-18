@@ -384,6 +384,9 @@
       if (rep.has_runs) {
         document.getElementById("lapsNote").textContent =
           "timed runs from event staging — the game sends no lap data for this event type";
+      } else if (rep.lap_source === "position-gate") {
+        document.getElementById("lapsNote").textContent =
+          "laps split at start-line returns — the game sends no lap data for this event type";
       } else if (!rep.has_laps) {
         document.getElementById("lapsNote").textContent = "free roam — whole session as one stint";
       } else {

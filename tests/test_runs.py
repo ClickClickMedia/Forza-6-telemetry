@@ -14,9 +14,19 @@ from app.session_data import SessionData
 from tests.test_laps import _synthetic_session
 
 
+def _straightline(sd: SessionData) -> SessionData:
+    """Non-returning trajectory: the synthetic driver laps an oval, which
+    the position-gate detector correctly reads as a circuit — these tests
+    exercise the DistanceTraveled machinery for point-to-point runs."""
+    sd.columns["PositionX"] = np.linspace(0.0, 20000.0, sd.n)
+    sd.columns["PositionZ"] = np.zeros(sd.n)
+    return sd
+
+
 def _with_run_signature(sd: SessionData) -> SessionData:
     """Overlay the real-world time-attack DistanceTraveled signature:
     free roam → staged negative → 0-crossing at launch → climb → snap reset."""
+    _straightline(sd)
     n = sd.n
     dist = np.zeros(n)
     q = n // 10
@@ -54,7 +64,7 @@ def test_detect_runs_from_distance_signature():
 def test_detect_runs_staged_at_zero_variant():
     """Route-blueprint time attacks stage AT dist=0 (no negative phase):
     teleport in, hold 0 while staged, climb, snap-reset at the finish."""
-    sd = _synthetic_session(seconds=200.0, hz=30.0)
+    sd = _straightline(_synthetic_session(seconds=200.0, hz=30.0))
     n = sd.n
     dist = np.zeros(n)
     q = n // 10
@@ -220,6 +230,74 @@ def test_brake_lock_requires_wheel_stoppage_not_just_slip():
     # from sustained lock so neither number hides the other.
     assert 8.0 < trac["near_lock_s"] < 12.0, trac["near_lock_s"]
     assert trac["near_lock_pct_of_braking"] > 0
+
+
+def _circuit_session(loops: float = 3.0, radius: float = 800.0,
+                     snap_at_frac: float = None):
+    """Synthetic staged circuit: the car drives `loops` circles at constant
+    speed. DistanceTraveled shows one staged run (or two, if `snap_at_frac`
+    injects a mid-race rewind snap)."""
+    seconds = 240.0
+    sd = _synthetic_session(seconds=seconds, hz=30.0)
+    n = sd.n
+    q = n // 12
+    speed = np.full(n, 40.0)
+    speed[:q] = 0.0                       # staged
+    sd.columns["Speed"] = speed
+    # Circle trajectory while driving; parked at the start point before.
+    total_angle = 2 * np.pi * loops
+    circumference_time = (n - q) / 30.0
+    ang = np.zeros(n)
+    ang[q:] = np.linspace(0, total_angle, n - q)
+    # radius chosen so 40 m/s matches the arc: r = v * T / total_angle
+    r = 40.0 * circumference_time / total_angle
+    sd.columns["PositionX"] = r * np.sin(ang)
+    sd.columns["PositionZ"] = r * (1 - np.cos(ang))
+    dist = np.full(n, -238.0)
+    dist[q:] = np.linspace(0, 8000, n - q)
+    if snap_at_frac is not None:
+        # A rewind snap-drops the distance, holds ~0 during the replay
+        # scrub, then climbs again (the shape seen in the real capture).
+        cut = q + int((n - q) * snap_at_frac)
+        dist[cut:cut + 60] = 0.5
+        dist[cut + 60:] = np.linspace(1, 4000, n - cut - 60)
+    sd.columns["DistanceTraveled"] = dist
+    for col in ("LapNumber", "CurrentLap", "BestLap", "LastLap"):
+        sd.columns[col] = np.zeros(n)
+    return sd
+
+
+def test_position_gate_splits_circuit_into_laps():
+    """A staged run that re-passes its start point with matching heading is
+    a circuit — split it into laps (validated on a real 3-lap race)."""
+    rep = lap_report(_circuit_session(loops=3.0))
+    assert rep["lap_source"] == "position-gate"
+    assert rep["has_laps"] and not rep["has_runs"]
+    complete = [l for l in rep["laps"] if l["complete"]]
+    assert len(complete) == 3
+    routes = [l["route_m"] for l in complete]
+    assert max(routes) / min(routes) < 1.1
+    assert rep["best_lap_s"] == min(l["time_s"] for l in complete)
+
+
+def test_position_gate_survives_mid_race_rewind_snap():
+    """A rewind snaps DistanceTraveled and splits the event into two 'runs'
+    — position laps must bridge the split (the real failure this fixes)."""
+    rep = lap_report(_circuit_session(loops=3.0, snap_at_frac=0.4))
+    assert rep["lap_source"] == "position-gate"
+    assert len([l for l in rep["laps"] if l["complete"]]) == 3
+
+
+def test_point_to_point_run_gets_no_position_laps():
+    """A run that never returns to its start stays a single timed run."""
+    sd = _with_run_signature(_synthetic_session(seconds=200.0, hz=30.0))
+    n = sd.n
+    # Straight-line trajectory: never re-approaches the start point.
+    sd.columns["PositionX"] = np.linspace(0, 20000, n)
+    sd.columns["PositionZ"] = np.zeros(n)
+    rep = lap_report(sd)
+    assert rep["lap_source"] is None
+    assert rep["has_runs"] and not rep["has_laps"]
 
 
 def test_observed_peaks_ignore_partial_throttle():

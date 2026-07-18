@@ -312,7 +312,14 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"Distance: {session.get('distance_m', 0) / 1000:.2f} km")
     best = rep.get("best_lap_s")
     n_complete = sum(1 for l in rep["laps"] if l.get("complete"))
-    if rep["has_laps"]:
+    if rep.get("lap_source") == "position-gate":
+        add(f"- Circuit event with **no lap data on the wire**: "
+            f"**{n_complete} laps** split at start-line returns (the car "
+            f"re-passed its launch point within {25:.0f} m travelling the "
+            f"same direction) · best lap **{_fmt_lap_time(best)}** "
+            f"*(estimated, line-to-line; a mid-race rewind stretches that "
+            f"lap's time and route but never corrupts the others)*")
+    elif rep["has_laps"]:
         add(f"- Laps completed: {n_complete} · Best lap: **{_fmt_lap_time(best)}**")
     elif rep.get("has_runs"):
         add(f"- Staged event with **no lap data on the wire**: "
@@ -482,7 +489,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
 
     if (rep["has_laps"] or rep.get("has_runs")) and rep["laps"]:
         add("## Timed runs (detected from event staging)" if rep.get("has_runs")
-            else "## Laps")
+            else "## Laps (split at start-line returns)"
+            if rep.get("lap_source") == "position-gate" else "## Laps")
         add("")
         rows = []
         for l in rep["laps"]:
@@ -491,7 +499,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 extra = f" · {l.get('route_m', 0) / 1000:.1f} km route"
             else:
                 label = str(l["lap"]) if l["lap"] is not None else "–"
-                extra = ""
+                extra = (f" · {l['route_m'] / 1000:.2f} km"
+                         if l.get("route_m") else "")
             rows.append([
                 label,
                 _fmt_lap_time(l.get("time_s"))
