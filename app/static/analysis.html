@@ -204,10 +204,18 @@
         <label class="field"><span>Per-gear (optional)</span><input id="su_gears" type="text" placeholder="3.36 / 2.51 / …"></label>
 
         <div class="eyebrow full frm-section">Alignment</div>
-        <label class="field"><span>Camber F (°)</span><input id="su_camber_f" type="text" inputmode="decimal"></label>
-        <label class="field"><span>Camber R (°)</span><input id="su_camber_r" type="text" inputmode="decimal"></label>
-        <label class="field"><span>Toe F (°)</span><input id="su_toe_f" type="text" inputmode="decimal"></label>
-        <label class="field"><span>Toe R (°)</span><input id="su_toe_r" type="text" inputmode="decimal"></label>
+        <label class="field"><span>Camber F (°)</span>
+          <span class="signwrap"><input id="su_camber_f" type="text" inputmode="decimal">
+          <button type="button" class="sign-btn" tabindex="-1">±</button></span></label>
+        <label class="field"><span>Camber R (°)</span>
+          <span class="signwrap"><input id="su_camber_r" type="text" inputmode="decimal">
+          <button type="button" class="sign-btn" tabindex="-1">±</button></span></label>
+        <label class="field"><span>Toe F (°)</span>
+          <span class="signwrap"><input id="su_toe_f" type="text" inputmode="decimal">
+          <button type="button" class="sign-btn" tabindex="-1">±</button></span></label>
+        <label class="field"><span>Toe R (°)</span>
+          <span class="signwrap"><input id="su_toe_r" type="text" inputmode="decimal">
+          <button type="button" class="sign-btn" tabindex="-1">±</button></span></label>
         <label class="field"><span>Caster (°)</span><input id="su_caster" type="text" inputmode="decimal"></label>
 
         <div class="eyebrow full frm-section">Anti-roll bars</div>
@@ -563,6 +571,16 @@
     }
     document.querySelectorAll("#suDrive .btn").forEach((b) =>
       b.addEventListener("click", () => setDrive(b.dataset.v)));
+
+    // Phone number pads have no minus key — the ± button toggles the sign
+    // of signed fields (camber/toe) without leaving the numeric keyboard.
+    document.querySelectorAll(".sign-btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        const input = b.parentElement.querySelector("input");
+        const v = input.value.trim();
+        input.value = v.startsWith("-") ? v.slice(1) : "-" + v;
+        input.focus();
+      }));
 
     function fillForm(data) {
       data = data || {};

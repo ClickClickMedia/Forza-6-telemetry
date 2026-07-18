@@ -616,6 +616,21 @@ details.exporter > .menu .hint { font-size: 10px; color: var(--ink-mute); font-f
 }
 .sheet > footer .btn { flex: 1; }
 .frm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 10px; }
+.signwrap { position: relative; display: block; }
+.signwrap input { padding-right: 44px; }
+.sign-btn {
+  position: absolute;
+  right: 5px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--carbon);
+  color: var(--amber);
+  font-size: 16px; font-weight: 700;
+  font-family: var(--mono);
+  cursor: pointer;
+}
+.sign-btn:active { background: var(--amber); color: var(--amber-ink); }
 .frm-grid .full { grid-column: 1 / -1; }
 .frm-section { margin: 14px 0 6px; }
 .seg { display: flex; gap: 6px; }

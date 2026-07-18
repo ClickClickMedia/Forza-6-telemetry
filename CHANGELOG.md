@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.5] - 2026-07-18
+
+### Fixed
+- **Negative values are now enterable on phones.** Mobile numeric keypads
+  have no minus key, which made camber and toe impossible to type — the
+  signed fields (camber F/R, toe F/R) now carry a ± button inside the
+  input that flips the sign without leaving the number pad.
+
 ## [2.1.4] - 2026-07-18
 
 ### Changed
@@ -137,6 +145,7 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.1.5]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.5
 [2.1.4]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.4
 [2.1.3]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.3
 [2.1.2]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.1.2
