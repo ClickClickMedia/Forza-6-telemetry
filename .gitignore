@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Runtime data (raw sessions + SQLite) — keep the directory, ignore contents.
+data/*
+!data/.gitkeep
+
+# OS / editor
+.DS_Store
+*.swp

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Live</title>
+  <meta name="theme-color" content="#0d1117" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <nav class="nav">
+    <span class="brand"><span class="fh">FH6</span> Telemetry</span>
+    <a class="navlink" href="/">Live</a>
+    <a class="navlink" href="/sessions">Sessions</a>
+    <a class="navlink" href="/analysis">Analysis</a>
+    <a class="navlink" href="/compare">Compare</a>
+    <a class="navlink" href="/debug">Debug</a>
+    <span class="nav-spacer"></span>
+    <span class="nav-status">
+      <span id="connDot" class="dot"></span>
+      <span id="connText">Offline</span>
+      <span id="pps" class="mono">0 pps</span>
+    </span>
+  </nav>
+
+  <main class="page wide">
+    <div class="spread" style="margin-bottom:10px;">
+      <span id="raceOn" class="pill idle">Waiting for packets…</span>
+      <span id="carInfo" class="muted mono" style="font-size:12px;"></span>
+    </div>
+
+    <div class="dash">
+      <!-- HERO: speed + gear + rpm -->
+      <section class="card span-6">
+        <div class="hero">
+          <div class="heroblock">
+            <div class="readout">
+              <span class="label">Speed</span>
+              <span class="value huge accent" id="speed">0</span>
+              <span class="unit">km/h</span>
+            </div>
+          </div>
+          <div class="heroblock center">
+            <div class="readout" style="align-items:center;">
+              <span class="label">Gear</span>
+              <span class="value huge" id="gear">–</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RPM gauge -->
+      <section class="card span-6">
+        <div class="rowlabel"><span class="k">Engine RPM</span><span class="v"><span id="rpm">0</span> / <span id="rpmMax">0</span></span></div>
+        <canvas id="rpmArc" class="chart" style="height:120px;border:none;background:transparent;"></canvas>
+        <div class="rowlabel"><span class="k">RPM %</span><span class="v" id="rpmPctText">0%</span></div>
+        <div class="bar"><div class="fill" id="rpmPctFill"></div></div>
+      </section>
+
+      <!-- Inputs -->
+      <section class="card span-6">
+        <div class="section-title">Inputs</div>
+        <div class="rowlabel"><span class="k">Throttle</span><span class="v" id="throttleV">0%</span></div>
+        <div class="bar throttle"><div class="fill" id="throttle"></div></div>
+        <div class="rowlabel" style="margin-top:8px;"><span class="k">Brake</span><span class="v" id="brakeV">0%</span></div>
+        <div class="bar brake"><div class="fill" id="brake"></div></div>
+        <div class="rowlabel" style="margin-top:8px;"><span class="k">Clutch</span><span class="v" id="clutchV">0%</span></div>
+        <div class="bar clutch"><div class="fill" id="clutch"></div></div>
+        <div class="rowlabel" style="margin-top:8px;"><span class="k">Handbrake</span><span class="v" id="handbrakeV">0%</span></div>
+        <div class="bar handbrake"><div class="fill" id="handbrake"></div></div>
+        <div class="rowlabel" style="margin-top:12px;"><span class="k">Steering</span><span class="v" id="steerV">0.00</span></div>
+        <div class="steerbar"><div class="center"></div><div class="fill" id="steerFill"></div></div>
+      </section>
+
+      <!-- Powertrain -->
+      <section class="card span-6">
+        <div class="section-title">Powertrain</div>
+        <div class="grid cols-2">
+          <div class="readout"><span class="label">Power</span><span class="value big" id="powerKw">0</span><span class="unit">kW</span></div>
+          <div class="readout"><span class="label">Torque</span><span class="value big" id="torqueNm">0</span><span class="unit">Nm</span></div>
+          <div class="readout"><span class="label">Boost</span><span class="value big orange" id="boostBar">0.00</span><span class="unit">bar · <span id="boostPsi">0.0 psi</span></span></div>
+          <div class="readout"><span class="label">Yaw rate</span><span class="value big" id="yaw">0.00</span><span class="unit">rad/s</span></div>
+        </div>
+      </section>
+
+      <!-- Laps -->
+      <section class="card span-4">
+        <div class="section-title">Laps <span class="muted">(#<span id="lapNum">–</span>)</span></div>
+        <div class="readout"><span class="label">Current</span><span class="value big mono" id="curLap">--:--.---</span></div>
+        <div class="grid cols-2" style="margin-top:8px;">
+          <div class="readout"><span class="label">Last</span><span class="value mono" style="font-size:22px" id="lastLap">--:--.---</span></div>
+          <div class="readout"><span class="label">Best</span><span class="value mono accent" style="font-size:22px" id="bestLap">--:--.---</span></div>
+        </div>
+      </section>
+
+      <!-- G forces -->
+      <section class="card span-4">
+        <div class="section-title">Acceleration (g)</div>
+        <div class="grid cols-2">
+          <div class="readout"><span class="label">Longitudinal</span><span class="value big" id="accelLong">0.00</span><span class="unit">g</span></div>
+          <div class="readout"><span class="label">Lateral</span><span class="value big" id="accelLat">0.00</span><span class="unit">g</span></div>
+        </div>
+      </section>
+
+      <!-- Tyre temps -->
+      <section class="card span-4">
+        <div class="section-title">Tyre Temp (°C)</div>
+        <div class="quad">
+          <div class="cell tyre-temp"><span class="pos">FL</span><div class="num">–</div></div>
+          <div class="cell tyre-temp"><span class="pos">FR</span><div class="num">–</div></div>
+          <div class="cell tyre-temp"><span class="pos">RL</span><div class="num">–</div></div>
+          <div class="cell tyre-temp"><span class="pos">RR</span><div class="num">–</div></div>
+        </div>
+      </section>
+
+      <!-- Slip ratio -->
+      <section class="card span-3">
+        <div class="section-title">Slip Ratio</div>
+        <div class="quad">
+          <div class="cell tyre-slipr"><span class="pos">FL</span><div class="num">–</div></div>
+          <div class="cell tyre-slipr"><span class="pos">FR</span><div class="num">–</div></div>
+          <div class="cell tyre-slipr"><span class="pos">RL</span><div class="num">–</div></div>
+          <div class="cell tyre-slipr"><span class="pos">RR</span><div class="num">–</div></div>
+        </div>
+      </section>
+
+      <!-- Slip angle -->
+      <section class="card span-3">
+        <div class="section-title">Slip Angle</div>
+        <div class="quad">
+          <div class="cell tyre-slipa"><span class="pos">FL</span><div class="num">–</div></div>
+          <div class="cell tyre-slipa"><span class="pos">FR</span><div class="num">–</div></div>
+          <div class="cell tyre-slipa"><span class="pos">RL</span><div class="num">–</div></div>
+          <div class="cell tyre-slipa"><span class="pos">RR</span><div class="num">–</div></div>
+        </div>
+      </section>
+
+      <!-- Combined slip -->
+      <section class="card span-3">
+        <div class="section-title">Combined Slip</div>
+        <div class="quad">
+          <div class="cell tyre-comb"><span class="pos">FL</span><div class="num">–</div></div>
+          <div class="cell tyre-comb"><span class="pos">FR</span><div class="num">–</div></div>
+          <div class="cell tyre-comb"><span class="pos">RL</span><div class="num">–</div></div>
+          <div class="cell tyre-comb"><span class="pos">RR</span><div class="num">–</div></div>
+        </div>
+      </section>
+
+      <!-- Suspension -->
+      <section class="card span-3">
+        <div class="section-title">Susp. Travel (norm)</div>
+        <div class="quad">
+          <div class="cell tyre-susp"><span class="pos">FL</span><div class="num">–</div></div>
+          <div class="cell tyre-susp"><span class="pos">FR</span><div class="num">–</div></div>
+          <div class="cell tyre-susp"><span class="pos">RL</span><div class="num">–</div></div>
+          <div class="cell tyre-susp"><span class="pos">RR</span><div class="num">–</div></div>
+        </div>
+      </section>
+
+      <!-- Recording + wake lock controls -->
+      <section class="card span-12">
+        <div class="spread">
+          <div class="btnrow">
+            <span id="recPill" class="pill idle">IDLE</span>
+            <span id="recFrames" class="muted mono" style="font-size:12px;">not recording</span>
+          </div>
+          <div class="btnrow">
+            <button id="btnStart" class="btn primary">● Start Recording</button>
+            <button id="btnStop" class="btn danger" disabled>■ Stop</button>
+            <button id="btnMarker" class="btn warn" disabled>⚑ Marker</button>
+            <button id="btnWake" class="btn ghost">Keep Awake: <span id="wakeState">off</span></button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="foot">Forza Horizon 6 Telemetry · live feed at ~18 Hz</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

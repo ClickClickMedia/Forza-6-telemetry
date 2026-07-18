@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="FH6">
+  <rect width="512" height="512" rx="96" fill="#0d1117"/>
+  <rect x="24" y="24" width="464" height="464" rx="80" fill="none" stroke="#37d67a" stroke-width="10" opacity="0.5"/>
+  <text x="256" y="300" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="188" font-weight="800" text-anchor="middle" fill="#37d67a" letter-spacing="4">FH6</text>
+  <text x="256" y="380" font-family="system-ui, sans-serif" font-size="52" font-weight="600"
+        text-anchor="middle" fill="#8b98a9" letter-spacing="6">TELEMETRY</text>
+</svg>

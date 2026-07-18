@@ -1,0 +1,8 @@
+# Forza Horizon 6 telemetry — runtime dependencies
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+websockets==14.1
+numpy==2.2.1
+pydantic==2.10.4
+# Parquet raw-storage backend (optional format; CSV works without it)
+pyarrow==18.1.0

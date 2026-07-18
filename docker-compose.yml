@@ -1,0 +1,31 @@
+services:
+  fh6-telemetry:
+    build: .
+    image: fh6-telemetry:latest
+    container_name: fh6-telemetry
+    restart: unless-stopped
+    ports:
+      # Forza "Data Out" UDP ingress. Must be UDP.
+      - "9876:9876/udp"
+      # Dashboard + API (open http://<docker-host-ip>:8080 from your phone).
+      - "8080:8080/tcp"
+    volumes:
+      # Persist SQLite metadata and raw session files on the host.
+      - ./data:/app/data
+    environment:
+      FH6_UDP_HOST: "0.0.0.0"
+      FH6_UDP_PORT: "9876"
+      FH6_HTTP_HOST: "0.0.0.0"
+      FH6_HTTP_PORT: "8080"
+      FH6_DATA_DIR: "/app/data"
+      # Browser live-update rate (Hz). 15-20 recommended.
+      FH6_PUSH_HZ: "18"
+      # Auto-end a session after this many seconds of silence.
+      FH6_SESSION_IDLE_TIMEOUT: "5"
+      # Raw storage format: "csv" (default) or "parquet".
+      FH6_RAW_FORMAT: "csv"
+      # Structured logs as JSON (1) or human-readable (0).
+      FH6_LOG_JSON: "1"
+      FH6_LOG_LEVEL: "INFO"
+      # Set to "1" to run the built-in synthetic generator (no Xbox needed).
+      FH6_SYNTHETIC: "0"
