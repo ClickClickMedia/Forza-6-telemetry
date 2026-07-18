@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "version": "0.2.0",
+    "updated": "2026-07-18",
+    "source": "Community-contributed FH6 ordinal captures only. PRs welcome: add entries you have PERSONALLY verified in-game (drive the car, read the ordinal on the dashboard's Analysis page). Never copy ordinals from FH4/FH5/Motorsport tables — ordinals are not stable across titles.",
+    "format": "ordinals: { \"<CarOrdinal>\": { \"year\": int, \"manufacturer\": str, \"model\": str, \"trim\": str?, \"display_name\": str? } }"
+  },
+  "ordinals": {
+    "3726": {
+      "year": 2023,
+      "manufacturer": "Acura",
+      "model": "Integra",
+      "trim": "A-Spec",
+      "verified": "owner-confirmed in-game 2026-07-18"
+    }
+  }
+}

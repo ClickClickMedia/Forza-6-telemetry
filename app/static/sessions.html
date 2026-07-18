@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Sessions</title>
+  <meta name="theme-color" content="#16130F" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <div class="spread" style="margin-bottom:4px;">
+      <h1 style="margin:0;">Sessions</h1>
+      <div class="btnrow">
+        <button id="btnCompare" class="btn small" disabled>Compare (0/2)</button>
+        <button id="btnRefresh" class="btn small ghost">Refresh</button>
+      </div>
+    </div>
+    <p id="storageLine" class="loadnote" style="margin:0 0 12px;"></p>
+
+    <div id="empty" class="notice hidden">
+      No recorded sessions yet. Sessions start automatically when you drive
+      (or press <b>● Record</b> on the Live page).
+    </div>
+
+    <div id="list" class="session-list" aria-live="polite"></div>
+
+    <footer class="foot">Recordings stay on this machine · CSV / Markdown export</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const FH = window.FH;
+    const { api, esc, fmt, fmtLapTime, fmtDate, fmtDuration, toast } = FH;
+    FH.shell("sessions");
+    FH.registerSW();
+
+    const CLASS_LETTER = ["D", "C", "B", "A", "S1", "S2", "X"];
+    const DRIVE = { 0: "FWD", 1: "RWD", 2: "AWD" };
+    const listEl = document.getElementById("list");
+    const compareSel = new Set();
+
+    function chips(s) {
+      const out = [];
+      if (s.car_name) out.push('<span class="pill">' + esc(s.car_name) + "</span>");
+      if (s.car_pi != null) {
+        const cls = CLASS_LETTER[s.car_class] != null ? CLASS_LETTER[s.car_class] : "?";
+        out.push('<span class="pill amber">' + esc(cls + " " + s.car_pi) + "</span>");
+      }
+      if (s.drivetrain != null) out.push('<span class="pill">' + esc(DRIVE[s.drivetrain] || s.drivetrain) + "</span>");
+      if (!s.car_name && s.car_ordinal != null) out.push('<span class="pill">#' + esc(s.car_ordinal) + "</span>");
+      if (s.ended_at == null && s.frame_count === 0) out.push('<span class="pill rec">RECORDING</span>');
+      return out.join("");
+    }
+
+    function duration(s) {
+      if (!s.created_at || !s.ended_at) return null;
+      return (new Date(s.ended_at) - new Date(s.created_at)) / 1000;
+    }
+
+    function card(s) {
+      const dur = duration(s);
+      return '<article class="card session-card" data-id="' + s.id + '">' +
+        '<div class="title-row">' +
+          '<label class="nowrap" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+            '<input type="checkbox" data-cmp="' + s.id + '"' + (compareSel.has(s.id) ? " checked" : "") + ">" +
+            '<span class="name">' + esc(s.name || ("Session " + s.id)) + "</span></label>" +
+          '<span class="when">' + esc(fmtDate(s.created_at)) + "</span>" +
+        "</div>" +
+        '<div class="chips">' + chips(s) + "</div>" +
+        '<div class="lapline">' +
+          '<span>BEST <b>' + esc(fmtLapTime(s.best_lap)) + "</b></span>" +
+          (dur ? "<span>" + esc(fmtDuration(dur)) + "</span>" : "") +
+          "<span>" + esc(fmt(s.frame_count, 0)) + " frames</span>" +
+          (s.raw_bytes ? "<span>" + esc(FH.fmtBytes(s.raw_bytes)) + "</span>" : "") +
+        "</div>" +
+        (s.notes ? '<div class="small muted">' + esc(s.notes) + "</div>" : "") +
+        '<div class="actions">' +
+          '<a class="btn small primary" href="/analysis?session=' + s.id + '">Analysis</a>' +
+          '<details class="exporter"><summary class="btn small">Export ▾</summary>' +
+            '<div class="menu">' +
+              '<div class="hint">FOR AI TUNING</div>' +
+              '<button data-act="copyai" data-id="' + s.id + '">Copy tuning report for AI</button>' +
+              '<a href="/api/sessions/' + s.id + '/tuning.md?download=1">Download tuning report (.md)</a>' +
+              '<div class="hint">DATA</div>' +
+              '<a href="/api/sessions/' + s.id + '/laps.csv">Per-lap summary (.csv)</a>' +
+              '<a href="/api/sessions/' + s.id + '/download.csv">Raw frames (.csv)</a>' +
+            "</div></details>" +
+          '<button class="btn small ghost" data-act="rename" data-id="' + s.id + '">Rename</button>' +
+          '<button class="btn small ghost" data-act="notes" data-id="' + s.id + '">Notes</button>' +
+          '<button class="btn small ghost" data-act="delete" data-id="' + s.id + '" style="color:var(--over)">Delete</button>' +
+        "</div>" +
+      "</article>";
+    }
+
+    async function load() {
+      listEl.innerHTML = '<div class="loadbar"></div><p class="loadnote">Loading sessions…</p>';
+      try {
+        const data = await api("/api/sessions");
+        const list = data.sessions || [];
+        document.getElementById("empty").classList.toggle("hidden", list.length > 0);
+        listEl.innerHTML = list.map(card).join("");
+        const st = data.storage || {};
+        document.getElementById("storageLine").textContent = list.length
+          ? list.length + " session" + (list.length === 1 ? "" : "s") + " · " +
+            FH.fmtBytes(st.total_bytes || 0) + " on disk in data\\sessions" +
+            (st.max_data_mb ? " · cap " + st.max_data_mb + " MB" : "")
+          : "";
+      } catch (e) {
+        listEl.innerHTML = '<div class="notice">Could not load sessions: ' + esc(e.message) + "</div>";
+      }
+      updateCompareBtn();
+    }
+
+    function updateCompareBtn() {
+      const btn = document.getElementById("btnCompare");
+      btn.disabled = compareSel.size !== 2;
+      btn.textContent = "Compare (" + compareSel.size + "/2)";
+    }
+
+    listEl.addEventListener("change", (e) => {
+      const cb = e.target.closest("input[data-cmp]");
+      if (!cb) return;
+      const id = Number(cb.getAttribute("data-cmp"));
+      if (cb.checked) {
+        if (compareSel.size >= 2) { cb.checked = false; toast("Pick at most two sessions"); return; }
+        compareSel.add(id);
+      } else compareSel.delete(id);
+      updateCompareBtn();
+    });
+
+    listEl.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const id = Number(btn.getAttribute("data-id"));
+      const act = btn.getAttribute("data-act");
+      try {
+        if (act === "copyai") {
+          btn.disabled = true;
+          const md = await api("/api/sessions/" + id + "/tuning.md");
+          const ok = await FH.copyText(md);
+          toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
+                   : "Copy failed — use Download instead");
+          btn.disabled = false;
+          btn.closest("details").removeAttribute("open");
+        } else if (act === "rename") {
+          const name = prompt("New session name:");
+          if (name === null) return;
+          await api("/api/sessions/" + id, { method: "PATCH", json: { name } });
+          load();
+        } else if (act === "notes") {
+          const cur = await api("/api/sessions/" + id);
+          const notes = prompt("Notes (car, track, tune, what you were testing):", cur.notes || "");
+          if (notes === null) return;
+          await api("/api/sessions/" + id, { method: "PATCH", json: { notes } });
+          toast("Notes saved");
+          load();
+        } else if (act === "delete") {
+          if (!confirm("Delete this session and its raw file permanently?")) return;
+          await api("/api/sessions/" + id, { method: "DELETE" });
+          compareSel.delete(id);
+          toast("Session deleted");
+          load();
+        }
+      } catch (err) { toast("Action failed: " + err.message); }
+    });
+
+    document.getElementById("btnCompare").addEventListener("click", () => {
+      if (compareSel.size !== 2) return;
+      const ids = Array.from(compareSel);
+      location.href = "/compare?a=" + ids[0] + "&b=" + ids[1];
+    });
+    document.getElementById("btnRefresh").addEventListener("click", load);
+
+    // Close any open export menu when tapping elsewhere.
+    document.addEventListener("click", (e) => {
+      document.querySelectorAll("details.exporter[open]").forEach((d) => {
+        if (!d.contains(e.target)) d.removeAttribute("open");
+      });
+    });
+
+    load();
+  })();
+  </script>
+</body>
+</html>

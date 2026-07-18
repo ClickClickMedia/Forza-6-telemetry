@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Setup help (README)
+    url: https://github.com/ClickClickMedia/Forza-6-telemetry#readme
+    about: Xbox Data Out, firewall, Docker, and phone-access instructions.
+  - name: 🔧 How to validate the packet spec
+    url: https://github.com/ClickClickMedia/Forza-6-telemetry/blob/main/CONTRIBUTING.md
+    about: Confirm or correct FH6 field offsets using the /debug page.

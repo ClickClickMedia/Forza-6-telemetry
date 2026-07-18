@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Live</title>
+  <meta name="theme-color" content="#16130F" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Signature: peripheral-vision pedal ribbons (brake left, throttle right) -->
+  <div class="ribbon left" aria-hidden="true"><i id="ribbonBrake"></i></div>
+  <div class="ribbon right" aria-hidden="true"><i id="ribbonThrottle"></i></div>
+
+  <main class="page live">
+    <div class="spread" style="margin-bottom:10px;">
+      <span id="racePill" class="pill">WAITING FOR PACKETS…</span>
+      <span id="carInfo" class="eyebrow"></span>
+    </div>
+
+    <!-- First-run helper: shown until the first packet ever arrives -->
+    <section id="setupCard" class="card hidden" style="margin-bottom:10px;">
+      <div class="card-head"><span class="eyebrow">No telemetry yet — set up Forza (2 minutes)</span></div>
+      <ol class="small" style="margin:0;padding-left:20px;line-height:2;color:var(--ink);">
+        <li>In Forza Horizon 6 open <b>Settings → HUD and Gameplay</b>, scroll to <b>Data Out</b></li>
+        <li>Data Out → <b>ON</b></li>
+        <li>Data Out IP Address → <b class="mono" id="setupIp">…</b></li>
+        <li>Data Out IP Port → <b class="mono" id="setupPort">9876</b></li>
+      </ol>
+      <p class="small muted" style="margin:10px 0 0;">
+        Then drive — this card disappears when the first packet arrives.
+        The Xbox/PC running Forza and this machine must be on the same
+        Wi-Fi/LAN. Packet rate is shown top-right.
+      </p>
+    </section>
+
+    <div class="live-grid">
+
+      <!-- Recording (top, as the first thing you check) -->
+      <section class="card rec-card" aria-label="Recording">
+        <div class="rec-strip">
+          <div class="rec-meta">
+            <span id="recPill" class="pill">IDLE</span>
+            <span id="recFrames">not recording</span>
+          </div>
+          <div class="btnrow">
+            <button id="btnStart" class="btn primary">● Record</button>
+            <button id="btnStop" class="btn danger" disabled>■ Stop</button>
+            <button id="btnMarker" class="btn" disabled>⚑ Marker</button>
+            <button id="btnWake" class="btn ghost">Keep awake: <span id="wakeState">off</span></button>
+          </div>
+        </div>
+        <div class="btnrow" style="margin-top:10px;">
+          <span class="eyebrow">Auto record</span>
+          <button class="unit-toggle mode-btn" data-mode="event">Events</button>
+          <button class="unit-toggle mode-btn" data-mode="motion">Any driving</button>
+          <button class="unit-toggle mode-btn" data-mode="manual">Off</button>
+        </div>
+        <p id="recHint" class="small muted" style="margin:8px 0 0;"></p>
+      </section>
+
+      <!-- HERO: speed · gear · rpm -->
+      <section class="hero-card" aria-label="Speed and engine">
+        <div class="hero-speed">
+          <span class="speed-num" id="speed">0</span>
+          <button class="unit-toggle" id="speedUnitBtn" title="Toggle km/h / mph">km/h</button>
+        </div>
+        <div class="hero-gear">
+          <span class="gear-num" id="gear">–</span>
+          <span class="eyebrow">gear</span>
+        </div>
+        <div class="rpm-band" role="img" aria-label="Engine RPM">
+          <div class="rpm-fill" id="rpmFill"></div>
+          <div class="rpm-redline"></div>
+          <div class="rpm-text"><span id="rpm">0</span><span class="rpm-max">/ <span id="rpmMax">0</span> rpm</span></div>
+        </div>
+      </section>
+
+      <!-- Timing -->
+      <section class="card timing-card" aria-label="Lap timing">
+        <div class="t-current">
+          <span class="eyebrow">Lap <b id="lapNum" class="num">–</b></span>
+          <span class="time-big mono" id="curLap">--:--.---</span>
+        </div>
+        <div class="t-side">
+          <div><span class="eyebrow">Last</span><span class="mono t-small" id="lastLap">--:--.---</span></div>
+          <div><span class="eyebrow">Best</span><span class="mono t-small best" id="bestLap">--:--.---</span></div>
+          <div><span class="eyebrow">Last Δ</span><span class="mono t-small" id="lapDelta">–</span></div>
+        </div>
+      </section>
+
+      <!-- Tyres -->
+      <section class="card tyre-card" aria-label="Tyre temperatures and slip">
+        <div class="card-head">
+          <span class="eyebrow">Tyres · temp <button class="unit-toggle" id="tempUnitBtn" title="Toggle °C / °F">°C</button> · slip underline</span>
+        </div>
+        <div class="tyre-stage">
+          <div class="pod" id="podFL" style="grid-column:1;grid-row:1;">
+            <div class="pod-top"><span class="pod-pos">FL</span><span class="pod-temp">–</span></div>
+            <div class="pod-slip"><i></i></div>
+          </div>
+          <svg class="car-glyph" viewBox="0 0 60 128" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+              <path d="M30 4 C44 4 50 14 50 30 L50 98 C50 114 44 124 30 124 C16 124 10 114 10 98 L10 30 C10 14 16 4 30 4 Z"/>
+              <path d="M18 38 C22 32 38 32 42 38 L42 58 C36 54 24 54 18 58 Z" opacity=".55"/>
+              <path d="M18 96 C24 92 36 92 42 96 L42 106 C36 103 24 103 18 106 Z" opacity=".55"/>
+            </g>
+          </svg>
+          <div class="pod" id="podFR" style="grid-column:3;grid-row:1;">
+            <div class="pod-top"><span class="pod-pos">FR</span><span class="pod-temp">–</span></div>
+            <div class="pod-slip"><i></i></div>
+          </div>
+          <div class="pod" id="podRL" style="grid-column:1;grid-row:2;">
+            <div class="pod-top"><span class="pod-pos">RL</span><span class="pod-temp">–</span></div>
+            <div class="pod-slip"><i></i></div>
+          </div>
+          <div class="pod" id="podRR" style="grid-column:3;grid-row:2;">
+            <div class="pod-top"><span class="pod-pos">RR</span><span class="pod-temp">–</span></div>
+            <div class="pod-slip"><i></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Powertrain -->
+      <section class="card power-strip" aria-label="Powertrain">
+        <div class="stat"><span class="eyebrow">Power</span><span class="v" id="powerKw">0</span><span class="u">kW</span></div>
+        <div class="stat"><span class="eyebrow">Torque</span><span class="v" id="torqueNm">0</span><span class="u">N·m</span></div>
+        <div class="stat"><span class="eyebrow">Boost</span><span class="v" id="boostPsi">0.0</span><span class="u">psi</span></div>
+      </section>
+
+      <!-- G + steering + desktop input bars -->
+      <section class="card gforce-card" aria-label="G-forces and inputs">
+        <div class="gforce-wrap">
+          <canvas class="gball" id="gball" width="108" height="108"></canvas>
+          <div class="steer-stack">
+            <div class="inrow"><span class="eyebrow">Steer</span>
+              <div class="steerbar"><div class="mid"></div><div class="fill" id="steerFill"></div></div>
+              <span class="val" id="steerV">0.00</span></div>
+            <div class="inrow desktop-inputs"><span class="eyebrow">Throttle</span>
+              <div class="inbar thr"><i id="thrBar"></i></div><span class="val" id="thrV">0%</span></div>
+            <div class="inrow desktop-inputs"><span class="eyebrow">Brake</span>
+              <div class="inbar brk"><i id="brkBar"></i></div><span class="val" id="brkV">0%</span></div>
+            <div class="inrow"><span class="eyebrow">Long · Lat</span>
+              <span class="val mono nowrap" id="gText" style="min-width:11ch;text-align:left;">+0.0 / +0.0 g</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <footer class="foot">Forza Horizon 6 · Data Out → this dashboard · no cloud</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

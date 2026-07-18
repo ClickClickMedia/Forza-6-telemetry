@@ -1,0 +1,9 @@
+# Dependencies for the standalone PyInstaller build.
+# Deliberately excludes pyarrow (Parquet backend): the exe uses CSV raw storage,
+# which needs nothing beyond the stdlib, keeping the binary small.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+websockets==14.1
+numpy==2.2.1
+pydantic==2.10.4
+pyinstaller==6.11.1

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Compare</title>
+  <meta name="theme-color" content="#16130F" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Compare</h1>
+
+    <div class="card" style="margin-bottom:10px;">
+      <div class="grid cols-4 pickers" style="align-items:end;">
+        <label class="field">
+          <span>Session A <span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--amber);"></span></span>
+          <select id="selA"></select>
+        </label>
+        <label class="field">
+          <span>Session B <span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--cold);"></span></span>
+          <select id="selB"></select>
+        </label>
+        <label class="field">
+          <span>Colour route by</span>
+          <select id="colourBy">
+            <option value="speed">Speed</option>
+            <option value="rear_slip">Rear slip</option>
+          </select>
+        </label>
+        <div class="btnrow"><button id="btnCompare" class="btn primary" style="width:100%;">Compare</button></div>
+      </div>
+    </div>
+
+    <div id="msg" class="notice">Pick two sessions and press Compare.</div>
+
+    <div id="result" class="hidden">
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head"><span class="eyebrow">Summary</span></div>
+        <div class="tablewrap">
+          <table class="data">
+            <thead><tr><th>Metric</th><th class="right" style="color:var(--amber)">A</th><th class="right" style="color:var(--cold)">B</th><th class="right">Δ (B − A)</th></tr></thead>
+            <tbody id="sumBody"></tbody>
+          </table>
+        </div>
+        <div class="legend" style="margin-top:8px;">
+          <span id="metaA"></span><span id="metaB"></span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head"><span class="eyebrow">Route overlay</span><span class="eyebrow" id="routeBy"></span></div>
+        <canvas id="routeCanvas" class="chart" style="height:340px;"></canvas>
+        <div class="legend" style="margin-top:8px;">
+          <span><span class="swatch" style="background:var(--amber)"></span>Session A</span>
+          <span><span class="swatch" style="background:var(--cold)"></span>Session B</span>
+        </div>
+      </div>
+
+      <div class="grid cols-2" id="charts"></div>
+    </div>
+
+    <footer class="foot">Two-session comparison</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const FH = window.FH;
+    const { api, esc, fmt, lineChart, routeChart } = FH;
+    FH.shell("compare");
+    FH.registerSW();
+
+    let COL_A = "#FFAE00", COL_B = "#4FA8FF";
+    try { const P = FH.palette(); COL_A = P.amber; COL_B = P.cold; } catch (e) {}
+    let lastData = null;
+
+    const CHANNELS = [
+      { key: "speed_kmh", title: "Speed (km/h)" },
+      { key: "throttle", title: "Throttle (%)" },
+      { key: "brake", title: "Brake (%)" },
+      { key: "steer", title: "Steering (−1..1)" },
+      { key: "gear", title: "Gear" },
+      { key: "rear_slip", title: "Rear slip" },
+      { key: "front_slip", title: "Front slip" },
+      { key: "susp_travel", title: "Suspension travel" }
+    ];
+
+    async function populate() {
+      try {
+        const data = await api("/api/sessions");
+        const list = data.sessions || [];
+        const selA = document.getElementById("selA"), selB = document.getElementById("selB");
+        const opts = list.map(s => '<option value="' + s.id + '">' +
+          esc(s.name || ("Session " + s.id)) + "</option>").join("");
+        selA.innerHTML = opts; selB.innerHTML = opts;
+        const a = FH.qs("a"), b = FH.qs("b");
+        if (a) selA.value = a; if (b) selB.value = b;
+        if (!a && list.length) selA.value = list[0].id;
+        if (!b && list.length > 1) selB.value = list[1].id;
+        if (a && b) runCompare();
+      } catch (e) {
+        document.getElementById("msg").textContent = "Failed to load sessions: " + e.message;
+      }
+    }
+
+    function sumRow(label, aV, bV, dV, dec, lowerIsBetter) {
+      let col = "var(--ink-dim)";
+      if (isFinite(dV) && dV !== 0) {
+        const improved = lowerIsBetter ? dV < 0 : dV > 0;
+        col = improved ? "var(--optimal)" : "var(--over)";
+      }
+      const dTxt = (dV > 0 ? "+" : "") + fmt(dV, dec);
+      return "<tr><td>" + label + "</td><td class='right'>" + fmt(aV, dec) +
+        "</td><td class='right'>" + fmt(bV, dec) +
+        "</td><td class='right' style='color:" + col + "'>" + dTxt + "</td></tr>";
+    }
+
+    function renderSummary(d) {
+      const sa = d.a.summary || {}, sb = d.b.summary || {}, dd = d.delta_b_minus_a || {};
+      document.getElementById("sumBody").innerHTML =
+        sumRow("Run time (s)", sa.run_time_s, sb.run_time_s, dd.run_time_s, 1, true) +
+        sumRow("Peak speed (km/h)", sa.peak_speed_kmh, sb.peak_speed_kmh, dd.peak_speed_kmh, 1, false) +
+        sumRow("Avg speed (km/h)", sa.avg_speed_kmh, sb.avg_speed_kmh, dd.avg_speed_kmh, 1, false) +
+        sumRow("Max lat (g)", sa.max_lat_g, sb.max_lat_g, dd.max_lat_g, 2, false) +
+        sumRow("Max accel (g)", sa.max_lon_accel_g, sb.max_lon_accel_g, dd.max_lon_accel_g, 2, false) +
+        sumRow("Max brake (g)", sa.max_lon_brake_g, sb.max_lon_brake_g, dd.max_lon_brake_g, 2, true);
+      document.getElementById("metaA").textContent = "A · " + metaStr(d.a.meta);
+      document.getElementById("metaB").textContent = "B · " + metaStr(d.b.meta);
+    }
+    function metaStr(m) {
+      if (!m) return "–";
+      return [m.name, m.car_pi != null ? "PI " + m.car_pi : "", m.drivetrain]
+        .filter(Boolean).join(" · ") || ("id " + (m.id != null ? m.id : "?"));
+    }
+
+    function renderCharts(d) {
+      const wrap = document.getElementById("charts");
+      wrap.innerHTML = "";
+      const ta = d.a.traces || {}, tb = d.b.traces || {};
+      CHANNELS.forEach((ch) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const cv = document.createElement("canvas");
+        cv.className = "chart"; cv.style.height = "170px";
+        card.appendChild(cv);
+        wrap.appendChild(card);
+        lineChart(cv, {
+          title: ch.title, height: 170, grid: true,
+          series: [
+            { x: ta.t || [], y: ta[ch.key] || [], color: COL_A, label: "A" },
+            { x: tb.t || [], y: tb[ch.key] || [], color: COL_B, label: "B" }
+          ]
+        });
+      });
+    }
+
+    function renderRoute(d) {
+      const by = d.colour_by || document.getElementById("colourBy").value;
+      document.getElementById("routeBy").textContent = "channel: " + by;
+      const ra = d.a.route || { x: [], z: [] }, rb = d.b.route || { x: [], z: [] };
+      routeChart(document.getElementById("routeCanvas"), null, {
+        height: 340,
+        multi: [
+          { x: ra.x || [], z: ra.z || [], color: COL_A },
+          { x: rb.x || [], z: rb.z || [], color: COL_B }
+        ]
+      });
+    }
+
+    function redraw() {
+      if (!lastData) return;
+      renderCharts(lastData);
+      renderRoute(lastData);
+    }
+
+    async function runCompare() {
+      const a = document.getElementById("selA").value;
+      const b = document.getElementById("selB").value;
+      const by = document.getElementById("colourBy").value;
+      if (!a || !b) return;
+      const msg = document.getElementById("msg");
+      msg.textContent = "Comparing…"; msg.classList.remove("hidden");
+      document.getElementById("result").classList.add("hidden");
+      try {
+        const d = await api("/api/compare?a=" + a + "&b=" + b + "&colour_by=" + by);
+        lastData = d;
+        history.replaceState(null, "", "/compare?a=" + a + "&b=" + b);
+        renderSummary(d); renderCharts(d); renderRoute(d);
+        msg.classList.add("hidden");
+        document.getElementById("result").classList.remove("hidden");
+      } catch (e) {
+        msg.textContent = "Compare failed: " + e.message;
+        msg.classList.remove("hidden");
+      }
+    }
+
+    document.getElementById("btnCompare").addEventListener("click", runCompare);
+    window.addEventListener("resize", redraw);
+    populate();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Debug</title>
+  <meta name="theme-color" content="#16130F" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <div class="spread" style="margin-bottom:12px;">
+      <h1 style="margin:0;">Packet debug</h1>
+      <div class="btnrow">
+        <span id="haveDot" class="dot"></span>
+        <span id="haveText" class="muted small">No packet yet</span>
+        <button id="btnPause" class="btn small">Pause</button>
+        <button id="btnSpec" class="btn small ghost">Spec</button>
+      </div>
+    </div>
+
+    <div class="notice" style="margin-bottom:10px;">
+      This page is the community validation tool: it shows the live byte
+      offset and decoded value of every field. The layout is pinned by a
+      physics cross-check — <b>Speed must equal |VelocityX,Y,Z|</b>. If they
+      disagree on your setup, screenshot this page and open an issue.
+    </div>
+
+    <div class="card tight" style="margin-bottom:10px;">
+      <div class="kv">
+        <div class="stat"><span class="eyebrow">Expected size</span><span class="v" id="expectSize">324</span></div>
+        <div class="stat"><span class="eyebrow">Received size</span><span class="v" id="recvSize">–</span></div>
+        <div class="stat"><span class="eyebrow">Match</span><span class="v" id="match">–</span></div>
+        <div class="stat"><span class="eyebrow">Speed vs |V|</span><span class="v" id="physCheck">–</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-head"><span class="eyebrow">Forward packets to another tool</span></div>
+      <p class="small muted" style="margin:0 0 10px;">
+        Forza allows only <b>one</b> Data Out target. Point the game at this
+        app, then mirror every raw packet to a second tool (SimHub, another
+        dashboard) here — both see identical 60&nbsp;Hz data.
+      </p>
+      <div class="btnrow">
+        <input id="fwdInput" type="text" placeholder="192.168.1.50:8888" style="max-width:220px;">
+        <button id="btnFwdSave" class="btn small">Apply</button>
+        <button id="btnFwdClear" class="btn small ghost">Disable</button>
+        <span id="fwdStatus" class="small muted"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <div class="spread">
+        <span class="small muted">Version <b class="mono" id="appVersion">…</b></span>
+        <div class="btnrow">
+          <button id="btnUpdate" class="btn small">Check for updates</button>
+          <span id="updateResult" class="small muted"></span>
+        </div>
+      </div>
+      <p class="small muted" style="margin:8px 0 0;">
+        Checking queries GitHub once, only when you click — this app makes
+        no other network calls, ever.
+      </p>
+    </div>
+
+    <div id="specCard" class="card hidden" style="margin-bottom:10px;">
+      <div class="card-head"><span class="eyebrow">Spec / field offsets</span>
+        <button id="btnSpecHide" class="btn small ghost">Hide</button></div>
+      <div class="tablewrap"><table class="data" id="specTable"></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="eyebrow">Fields</span></div>
+      <div class="tablewrap">
+        <table class="data">
+          <thead><tr><th>Offset</th><th>Name</th><th>Type</th><th class="right">Value</th></tr></thead>
+          <tbody id="fieldsBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="foot">Field table lives in app/packet.py · offsets pinned by unit tests</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const FH = window.FH;
+    const { api, esc } = FH;
+    FH.shell("debug");
+    FH.registerSW();
+
+    const body = document.getElementById("fieldsBody");
+    const haveDot = document.getElementById("haveDot");
+    const haveText = document.getElementById("haveText");
+    let paused = false;
+
+    function renderLast(d) {
+      const have = !!d.have_packet;
+      haveDot.className = "dot " + (have ? "ok" : "bad");
+      haveText.textContent = have ? "Packet received" : "No packet yet";
+
+      document.getElementById("expectSize").textContent = d.packet_size != null ? d.packet_size : 324;
+      document.getElementById("recvSize").textContent = d.received_size != null ? d.received_size : "–";
+      const ok = d.received_size != null && d.received_size === d.packet_size;
+      const m = document.getElementById("match");
+      m.textContent = d.received_size == null ? "–" : (ok ? "✓ OK" : "✗ SIZE");
+      m.style.color = d.received_size == null ? "" : (ok ? "var(--optimal)" : "var(--over)");
+
+      const fields = d.fields || [];
+      // Physics cross-check: dash Speed vs sled |Velocity|.
+      const val = {};
+      for (const f of fields) val[f.name] = f.value;
+      const phys = document.getElementById("physCheck");
+      if (val.Speed != null && val.VelocityX != null) {
+        const vmag = Math.hypot(val.VelocityX, val.VelocityY || 0, val.VelocityZ || 0);
+        const err = Math.abs((val.Speed || 0) - vmag);
+        const good = vmag < 1 ? err < 0.5 : err < 0.5;
+        phys.textContent = good ? "✓ " + err.toFixed(3) : "✗ " + err.toFixed(1);
+        phys.style.color = good ? "var(--optimal)" : "var(--over)";
+      } else {
+        phys.textContent = "–";
+        phys.style.color = "";
+      }
+
+      if (!fields.length) {
+        body.innerHTML = '<tr><td colspan="4" class="muted">No fields</td></tr>';
+        return;
+      }
+      body.innerHTML = fields.map((f) => {
+        let v = f.value;
+        if (typeof v === "number" && !Number.isInteger(v)) v = v.toFixed(4);
+        return "<tr><td>" + esc(f.offset) + "</td><td>" + esc(f.name) +
+               "</td><td class='muted'>" + esc(f.type) + "</td><td class='right'>" + esc(v) + "</td></tr>";
+      }).join("");
+    }
+
+    async function tick() {
+      if (paused) return;
+      try { renderLast(await api("/api/debug/last")); }
+      catch (e) {
+        haveDot.className = "dot bad";
+        haveText.textContent = "Error: " + e.message;
+      }
+    }
+
+    async function showSpec() {
+      try {
+        const s = await api("/api/debug/spec");
+        const offsets = s.field_offsets || {};
+        const names = s.field_names || Object.keys(offsets);
+        document.getElementById("specTable").innerHTML =
+          "<thead><tr><th>Offset</th><th>Field</th></tr></thead><tbody>" +
+          names.map((n) => "<tr><td>" + esc(offsets[n] != null ? offsets[n] : "") +
+            "</td><td>" + esc(n) + "</td></tr>").join("") +
+          "</tbody>";
+        document.getElementById("specCard").classList.remove("hidden");
+      } catch (e) { FH.toast("Spec failed: " + e.message); }
+    }
+
+    document.getElementById("btnSpec").addEventListener("click", showSpec);
+    document.getElementById("btnSpecHide").addEventListener("click", () => {
+      document.getElementById("specCard").classList.add("hidden");
+    });
+    const btnPause = document.getElementById("btnPause");
+    btnPause.addEventListener("click", () => {
+      paused = !paused;
+      btnPause.textContent = paused ? "Resume" : "Pause";
+      btnPause.classList.toggle("on", paused);
+    });
+
+    // ---- forwarding ----
+    function renderFwd(f) {
+      const s = document.getElementById("fwdStatus");
+      if (f && f.target) {
+        document.getElementById("fwdInput").value = f.target;
+        s.textContent = "→ " + f.target + " · " + (f.forwarded || 0) +
+          " sent" + (f.errors ? " · " + f.errors + " errors" : "");
+      } else {
+        s.textContent = "off";
+      }
+    }
+    api("/api/settings").then((st) => renderFwd(st.forward)).catch(() => {});
+    document.getElementById("btnFwdSave").addEventListener("click", async () => {
+      try {
+        const st = await api("/api/settings", { method: "PUT",
+          json: { forward_to: document.getElementById("fwdInput").value } });
+        renderFwd(st.forward);
+        FH.toast(st.forward && st.forward.target
+          ? "Forwarding to " + st.forward.target : "Forwarding disabled");
+      } catch (e) { FH.toast("Forwarding: " + e.message); }
+    });
+    document.getElementById("btnFwdClear").addEventListener("click", async () => {
+      try {
+        const st = await api("/api/settings", { method: "PUT", json: { forward_to: "" } });
+        document.getElementById("fwdInput").value = "";
+        renderFwd(st.forward);
+        FH.toast("Forwarding disabled");
+      } catch (e) { FH.toast("Forwarding: " + e.message); }
+    });
+
+    // ---- version + manual update check ----
+    api("/health").then((h) => {
+      document.getElementById("appVersion").textContent = h.version || "?";
+    }).catch(() => {});
+    document.getElementById("btnUpdate").addEventListener("click", async (e) => {
+      const out = document.getElementById("updateResult");
+      e.currentTarget.disabled = true;
+      out.textContent = "checking…";
+      try {
+        const r = await api("/api/update-check", { method: "POST", json: {} });
+        if (!r.ok) out.textContent = r.error || "check failed";
+        else if (r.update_available) {
+          out.innerHTML = 'v' + r.latest + ' available — <a href="' + r.url +
+            '" target="_blank" rel="noopener">get it</a>';
+        } else out.textContent = "up to date (v" + r.current + ")";
+      } catch (err) { out.textContent = "check failed: " + err.message; }
+      e.currentTarget.disabled = false;
+    });
+
+    tick();
+    setInterval(tick, 500);
+  })();
+  </script>
+</body>
+</html>

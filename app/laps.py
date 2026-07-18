@@ -1,0 +1,667 @@
+"""Lap segmentation and per-lap tuning aggregates.
+
+Turns a recorded session into the numbers a tuner actually reads:
+
+* laps, detected from ``LapNumber`` transitions (Horizon increments it at the
+  line and resets ``CurrentLap``); free-roam sessions with no laps fall back
+  to a single whole-session "stint" so every session still gets aggregates;
+* per-lap and per-session aggregates chosen for setup work — tyre temps and
+  front/rear balance, slip-angle-based understeer index, slip-ratio traction
+  events, suspension travel usage, shift RPM and limiter time.
+
+All heuristics/thresholds are module constants so the community can argue
+about them in one place.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+
+from .session_data import SessionData
+
+WHEELS = ["FL", "FR", "RL", "RR"]
+_WHEEL_SUFFIX = ["FrontLeft", "FrontRight", "RearLeft", "RearRight"]
+
+# --- Tunable thresholds -----------------------------------------------------
+MIN_LAP_S = 15.0          # ignore "laps" shorter than this (glitch guard)
+CORNERING_LAT_G = 0.30    # |lateral g| above this counts as cornering
+FULL_THROTTLE = 0.98      # fraction of 255
+BRAKING_MIN = 0.05
+LIMITER_RPM_FRAC = 0.97   # fraction of EngineMaxRpm counted as "on limiter"
+SUSP_BOTTOM_OUT = 0.98
+
+# Sliding is judged with hysteresis so threshold chatter doesn't inflate
+# slide time: a slide starts when combined slip exceeds SLIDE_ENTER, ends
+# when it falls below SLIDE_EXIT, and only counts if it lasts SLIDE_MIN_S.
+SLIDE_ENTER = 1.05
+SLIDE_EXIT = 0.90
+SLIDE_MIN_S = 0.10
+COMBINED_SLIP_HIGH = 1.0  # legacy single threshold (analysis page events)
+
+# Discrete traction events are grouped: a new event requires the condition
+# to hold for EVENT_MIN_S and a EVENT_GAP_S recovery since the previous one.
+EVENT_MIN_S = 0.10
+EVENT_GAP_S = 0.30
+
+# Observed peaks (power/torque) count only "valid pull" samples: near-full
+# throttle, engine well above idle, sustained a few frames — so a collision
+# spike or downshift transient can't masquerade as the car's output.
+PEAK_THROTTLE = 0.95
+PEAK_SUSTAIN_FRAMES = 3
+
+# Lateral-G reporting: raw max is polluted by collisions/landings, so the
+# headline "cornering max" is the 99th percentile of spike-filtered samples
+# (frame-to-frame |Δlat| above LAT_SPIKE_G excluded, airborne excluded).
+LAT_SPIKE_G = 2.0
+AIRBORNE_SUSP = 0.02      # all four corners below this = wheels off ground
+
+# Free-roam time-attack run detection (validated against real captures):
+# entering an event grids the car behind the start line with NEGATIVE
+# DistanceTraveled; it crosses 0 at launch and snap-resets on event exit.
+RUN_NEG_DIST_M = -5.0     # staged-behind-line signature
+RUN_SNAP_DROP_M = -50.0   # a frame-to-frame drop this large = event boundary
+RUN_MIN_S = 30.0          # ignore shorter "runs"
+RUN_MIN_ROUTE_M = 500.0   # ignore trivial route distances
+
+# Tyre temperature working window (deg C) used for verdicts, calibrated to
+# community practice (ForzaTune guide + Forza forums physics threads):
+# optimal grip ~88-99 C (190-210 F), usable street band ~77-121 C
+# (170-250 F). "In window" here = 77-99 C: warm enough to work, at or below
+# the optimal band's top. One value per tyre on the wire (no
+# inner/middle/outer split — that's the in-game HUD only, not Data Out).
+# Keep aligned with TEMP in app/static/app.js.
+TEMP_COLD_C = 77.0
+TEMP_HOT_C = 99.0
+
+# Balance thresholds on the understeer index (front minus rear mean
+# normalized slip angle while cornering on grip; Forza slip channels are
+# normalized, 1.0 = grip limit). The band is asymmetric because steered
+# front wheels naturally carry more slip angle than rears even in a neutral
+# car. Provisional values pending community calibration — argue here.
+USI_UNDERSTEER = 0.15
+USI_OVERSTEER = -0.05
+MIN_CORNERING_PCT = 5.0   # below this, refuse to call a balance verdict
+
+
+def _f_to_c(arr: np.ndarray) -> np.ndarray:
+    return (arr - 32.0) * (5.0 / 9.0)
+
+
+def _wheel_cols(sd: SessionData, prefix: str) -> List[np.ndarray]:
+    return [sd.col(prefix + s) for s in _WHEEL_SUFFIX]
+
+
+def _count_runs(mask: np.ndarray, min_len: int = 3) -> int:
+    if mask.size == 0:
+        return 0
+    padded = np.concatenate(([0], mask.astype(np.int8), [0]))
+    diffs = np.diff(padded)
+    starts = np.where(diffs == 1)[0]
+    ends = np.where(diffs == -1)[0]
+    return int(np.sum((ends - starts) >= min_len))
+
+
+def _mask_spans(mask: np.ndarray) -> List[tuple]:
+    """Contiguous True spans of ``mask`` as (start, end) index pairs."""
+    if mask.size == 0:
+        return []
+    padded = np.concatenate(([0], mask.astype(np.int8), [0]))
+    diffs = np.diff(padded)
+    return list(zip(np.where(diffs == 1)[0], np.where(diffs == -1)[0]))
+
+
+def _grouped_events(mask: np.ndarray, dt: np.ndarray,
+                    min_s: float = EVENT_MIN_S,
+                    gap_s: float = EVENT_GAP_S) -> Dict[str, Any]:
+    """Group a boolean condition into discrete events with durations.
+
+    An event must last at least ``min_s``; consecutive spans separated by
+    less than ``gap_s`` merge into one event (recovery period). Returns
+    count, total time, and the longest single event — the numbers that make
+    "180 wheelspin events" actually interpretable.
+    """
+    spans = _mask_spans(mask)
+    if not spans:
+        return {"events": 0, "total_s": 0.0, "longest_s": 0.0}
+    cum = np.concatenate(([0.0], np.cumsum(dt)))
+    t0 = lambda i: cum[i]  # noqa: E731
+    merged: List[List[float]] = []
+    for s, e in spans:
+        start, end = t0(s), t0(min(e, len(cum) - 1))
+        if merged and start - merged[-1][1] < gap_s:
+            merged[-1][1] = end
+        else:
+            merged.append([start, end])
+    durations = [e - s for s, e in merged if (e - s) >= min_s]
+    return {
+        "events": len(durations),
+        "total_s": round(float(sum(durations)), 2),
+        "longest_s": round(float(max(durations)) if durations else 0.0, 2),
+    }
+
+
+def _hysteresis_mask(x: np.ndarray, enter: float, exit_: float) -> np.ndarray:
+    """True while ``x`` is in a slide: enters above ``enter``, exits below
+    ``exit_``. Prevents threshold chatter from counting one slide many times."""
+    out = np.zeros(x.size, dtype=bool)
+    active = False
+    for i, v in enumerate(x):
+        if active:
+            active = v > exit_
+        else:
+            active = v >= enter
+        out[i] = active
+    return out
+
+
+def detect_runs(sd: SessionData) -> List[Dict[str, Any]]:
+    """Detect free-roam time-attack runs from DistanceTraveled behaviour.
+
+    Validated against real FH6 captures: entering an event stages the car
+    behind the start line with *negative* DistanceTraveled, which crosses 0
+    at launch and snap-resets when the event ends (or on a restart). Lap
+    fields stay 0 in these events, so this is the only run signal.
+    """
+    if sd.n < 10:
+        return []
+    dist = sd.col("DistanceTraveled")
+    t = sd.col("t_mono")
+    d = np.diff(dist)
+    boundaries = sorted(np.where(d < RUN_SNAP_DROP_M)[0] + 1)
+
+    runs: List[Dict[str, Any]] = []
+
+    def _emit(start: int, end: int) -> None:
+        duration = float(t[end - 1] - t[start])
+        route = float(np.max(dist[start:end])) if end > start else 0.0
+        if duration >= RUN_MIN_S and route >= RUN_MIN_ROUTE_M:
+            runs.append({"i0": int(start), "i1": int(end),
+                         "time_s": round(duration, 3),
+                         "route_m": round(route, 1)})
+
+    # Variant 1 — staged behind the line: a contiguous negative-distance
+    # span dipping below -50 m; the run starts where the span ends (the
+    # start-line crossing — distance climbs gradually through 0, so the
+    # frame before crossing may be only -3 m).
+    covered: List[int] = []
+    for s, e in _mask_spans(dist < 0):
+        if e >= sd.n:
+            continue
+        if float(np.min(dist[s:e])) > -50.0:
+            continue  # jitter around zero, not a staged start
+        start = e
+        after = [b for b in boundaries if b > start]
+        end = after[0] if after else sd.n
+        _emit(start, end)
+        covered.append(start)
+
+    # Variant 2 — staged AT zero (observed on route-blueprint time attacks):
+    # the event teleports the car in with DistanceTraveled pinned to 0, it
+    # holds 0 while staged, climbs through the run, and snap-resets at the
+    # finish. Detect: a snap-boundary segment that OPENS below 1 m, holds
+    # there ≥ 0.5 s, then climbs. Run starts at the end of the hold.
+    seg_starts = [0] + boundaries
+    seg_ends = boundaries + [sd.n]
+    for s0, s1 in zip(seg_starts, seg_ends):
+        if s1 - s0 < 60 or float(dist[s0]) >= 1.0:
+            continue
+        if any(s0 <= c < s1 for c in covered):
+            continue  # already found via variant 1
+        hold = s0
+        while hold < s1 and dist[hold] < 1.0:
+            hold += 1
+        if hold - s0 < 30 or hold >= s1:  # need a real staging hold (~0.5 s)
+            continue
+        _emit(hold - 1, s1)
+
+    runs.sort(key=lambda r: r["i0"])
+    return runs
+
+
+def _pct(mask: np.ndarray, dt: np.ndarray) -> float:
+    total = float(np.sum(dt))
+    if total <= 0:
+        return 0.0
+    return float(np.sum(dt[mask])) / total * 100.0
+
+
+def _seg_indices(sd: SessionData) -> List[Dict[str, Any]]:
+    """Frame index ranges per lap. Falls back to one whole-session stint."""
+    lap_no = sd.col("LapNumber").astype(int)
+    n = sd.n
+    segments: List[Dict[str, Any]] = []
+    if n == 0:
+        return segments
+
+    changes = np.where(np.diff(lap_no) != 0)[0]
+    has_laps = changes.size > 0 or int(lap_no.max()) > 0
+    if not has_laps:
+        return [{"lap": None, "i0": 0, "i1": n, "complete": False}]
+
+    bounds = [0] + [int(i) + 1 for i in changes] + [n]
+    for k in range(len(bounds) - 1):
+        i0, i1 = bounds[k], bounds[k + 1]
+        if i1 <= i0:
+            continue
+        segments.append({
+            "lap": int(lap_no[i0]),
+            "i0": i0,
+            "i1": i1,
+            # A segment is a complete lap when the lap number advanced at its
+            # end (i.e. it is not the trailing partial segment).
+            "complete": k < len(bounds) - 2,
+        })
+    return segments
+
+
+def _lap_time(sd: SessionData, seg: Dict[str, Any]) -> Optional[float]:
+    """Best available lap time for a segment.
+
+    On completion Horizon writes the finished lap's time into ``LastLap`` of
+    the *next* frames; ``CurrentLap`` at the last in-segment frame is the
+    fallback (slightly short by up to one frame interval).
+    """
+    from .packet import sane_lap
+
+    i1 = seg["i1"]
+    if seg["complete"] and i1 < sd.n:
+        last_lap = sane_lap(float(sd.col("LastLap")[min(i1 + 2, sd.n - 1)]))
+        if last_lap > 0:
+            return last_lap
+    cur = sd.col("CurrentLap")[seg["i0"]:i1]
+    if cur.size:
+        t = sane_lap(float(np.max(cur)))
+        if t > 0:
+            return t
+    return None
+
+
+def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
+    """Aggregates for one frame range [i0, i1)."""
+    sl = slice(i0, i1)
+    dt = sd.dt()[sl]
+    speed_ms = sd.col("Speed")[sl]
+    speed_kmh = speed_ms * 3.6
+    accel = sd.col("Accel")[sl] / 255.0
+    brake = sd.col("Brake")[sl] / 255.0
+    handbrake = sd.col("HandBrake")[sl] / 255.0
+    steer = np.clip(sd.col("Steer")[sl] / 127.0, -1.0, 1.0)
+    yaw_rate = sd.col("AngularVelocityY")[sl]
+    lat_g = np.abs(sd.col("AccelerationX")[sl]) / 9.81
+    rpm = sd.col("CurrentEngineRpm")[sl]
+    rpm_max = sd.col("EngineMaxRpm")[sl]
+    gear = sd.col("Gear")[sl].astype(int)
+
+    temps_c = [_f_to_c(t[sl]) for t in _wheel_cols(sd, "TireTemp")]
+    slip_angle = [a[sl] for a in _wheel_cols(sd, "TireSlipAngle")]
+    slip_ratio = [r[sl] for r in _wheel_cols(sd, "TireSlipRatio")]
+    combined = [c[sl] for c in _wheel_cols(sd, "TireCombinedSlip")]
+    susp = [s[sl] for s in _wheel_cols(sd, "NormalizedSuspensionTravel")]
+
+    cornering = (lat_g > CORNERING_LAT_G) & (speed_ms > 8.0)
+
+    # Driven wheels follow the drivetrain — watching the wrong axle scored
+    # a FWD car "0 wheelspin" while its fronts spun for 30 s (real capture).
+    dt_type = int(sd.col("DrivetrainType")[i0]) if i1 > i0 else -1
+    driven_idx = {0: [0, 1], 1: [2, 3], 2: [0, 1, 2, 3]}.get(dt_type, [0, 1, 2, 3])
+    driven_slip = np.maximum.reduce([slip_ratio[i] for i in driven_idx])
+
+    def _wavg(arr: np.ndarray) -> float:
+        return float(np.average(arr, weights=dt)) if arr.size else 0.0
+
+    # Counter-steer (opposite lock): steering against the car's rotation.
+    # During a drift the FRONT wheels carry huge slip angles, which would
+    # fool a naive front-vs-rear comparison into calling it "understeer" —
+    # so balance is judged only on grip-driving frames, and drift time is
+    # reported as its own number.
+    counter_steer = (
+        (np.sign(steer) == -np.sign(yaw_rate))
+        & (np.abs(steer) > 0.15)
+        & (np.abs(yaw_rate) > 0.15)
+    )
+    drifting = counter_steer | (handbrake > 0.1)
+    grip_corner = cornering & ~drifting
+
+    # Understeer index: mean |front slip angle| minus mean |rear slip angle|
+    # while cornering on grip (drift frames excluded). Positive = front tyres
+    # sliding more = understeer; negative = oversteer tendency. (radians)
+    front_sa = np.maximum(np.abs(slip_angle[0]), np.abs(slip_angle[1]))
+    rear_sa = np.maximum(np.abs(slip_angle[2]), np.abs(slip_angle[3]))
+    if np.any(grip_corner):
+        usi = float(np.mean(front_sa[grip_corner]) - np.mean(rear_sa[grip_corner]))
+        front_sa_corner = float(np.mean(front_sa[grip_corner]))
+        rear_sa_corner = float(np.mean(rear_sa[grip_corner]))
+    else:
+        usi, front_sa_corner, rear_sa_corner = 0.0, 0.0, 0.0
+
+    # Balance by corner phase: WHERE the understeer lives changes the fix
+    # (entry -> brake balance/damping, mid -> ARB/springs/aero, power-on ->
+    # diff/pressures, lift -> rebound/decel diff).
+    phase_masks = {
+        "entry": grip_corner & (brake > 0.15) & (accel < 0.2),
+        "mid": grip_corner & (brake < 0.10) & (accel >= 0.05) & (accel < 0.5),
+        "exit": grip_corner & (accel >= 0.5),
+        "lift": grip_corner & (accel < 0.05) & (brake < 0.05),
+    }
+    phases: Dict[str, Any] = {}
+    for pname, pmask in phase_masks.items():
+        if int(np.sum(pmask)) >= 30:  # ~0.5 s of evidence minimum
+            phases[pname] = {
+                "usi": round(float(np.mean(front_sa[pmask]) - np.mean(rear_sa[pmask])), 3),
+                "time_s": round(float(np.sum(dt[pmask])), 1),
+            }
+        else:
+            phases[pname] = {"usi": None, "time_s": round(float(np.sum(dt[pmask])), 1)}
+
+    # Tyre-temp statistics use ACTIVE-DRIVING frames only (>=40 km/h):
+    # stationary time, menus and cool-down laps otherwise drag the averages
+    # away from what the tyres do when they matter. Falls back to all frames
+    # if the session has almost no active driving.
+    active = speed_ms >= 11.1
+    if float(np.sum(dt[active])) < 0.05 * float(np.sum(dt)):
+        active = np.ones(speed_ms.size, dtype=bool)
+    dt_active = dt[active]
+
+    def _awavg(arr: np.ndarray) -> float:
+        return float(np.average(arr[active], weights=dt_active)) if dt_active.size else 0.0
+
+    def _amed(arr: np.ndarray) -> float:
+        return float(np.median(arr[active])) if dt_active.size else 0.0
+
+    front_temps = np.concatenate([temps_c[0][active], temps_c[1][active]])
+    rear_temps = np.concatenate([temps_c[2][active], temps_c[3][active]])
+
+    rear_comb = np.maximum(combined[2], combined[3])
+    front_comb = np.maximum(combined[0], combined[1])
+
+    # Slide time with hysteresis (enter 1.05 / exit 0.90) so chatter around
+    # the grip limit doesn't inflate the numbers.
+    front_slide = _hysteresis_mask(front_comb, SLIDE_ENTER, SLIDE_EXIT)
+    rear_slide = _hysteresis_mask(rear_comb, SLIDE_ENTER, SLIDE_EXIT)
+    front_slide_g = _grouped_events(front_slide, dt, min_s=SLIDE_MIN_S)
+    rear_slide_g = _grouped_events(rear_slide, dt, min_s=SLIDE_MIN_S)
+
+    moving = speed_ms > 3.0
+    no_handbrake = handbrake < 0.1
+    wheelspin_g = _grouped_events(
+        (driven_slip > 0.5) & (accel > 0.4) & moving & no_handbrake, dt
+    )
+    lock_front_g = _grouped_events(
+        ((slip_ratio[0] < -0.5) | (slip_ratio[1] < -0.5))
+        & (brake > 0.6) & moving & no_handbrake, dt
+    )
+    lock_rear_g = _grouped_events(
+        ((slip_ratio[2] < -0.5) | (slip_ratio[3] < -0.5))
+        & (brake > 0.6) & moving & no_handbrake, dt
+    )
+    braking_time_s = float(np.sum(dt[brake >= BRAKING_MIN]))
+    # Percentage uses the UNION of locked time (front+rear summed would
+    # double-count moments when both axles lock at once).
+    lock_any_g = _grouped_events(
+        ((slip_ratio[0] < -0.5) | (slip_ratio[1] < -0.5)
+         | (slip_ratio[2] < -0.5) | (slip_ratio[3] < -0.5))
+        & (brake > 0.6) & moving & no_handbrake, dt
+    )
+    lock_pct_of_braking = round(
+        min(100.0, lock_any_g["total_s"] / braking_time_s * 100.0), 1
+    ) if braking_time_s > 0.5 else 0.0
+
+    max_travel = np.maximum.reduce([s for s in susp])
+    bottom_mask = max_travel > SUSP_BOTTOM_OUT
+    bottom_out = _count_runs(bottom_mask)  # sustained >=3 frames = ~50 ms
+    bottom_raw_crossings = _count_runs(bottom_mask, min_len=1)
+    bottom_longest = _grouped_events(bottom_mask, dt, min_s=0.0, gap_s=0.0)["longest_s"]
+    time_at_bottom = round(float(np.sum(dt[bottom_mask])), 2)
+    travel_p99 = round(float(np.percentile(max_travel, 99)), 3) if max_travel.size else 0.0
+
+    # Lateral G: raw max is kept but excluded from handling headlines —
+    # collisions/landings spike it. Two filtered views:
+    #   * p99 of clean frames (legacy), and
+    #   * SUSTAINED cornering grip — the best lateral-G held continuously
+    #     for 0.4 s while actually steering at speed. Kerbs, banking blips
+    #     and compressions can't reach it; this is the tuning-grade number.
+    airborne = np.minimum.reduce([s for s in susp]) < AIRBORNE_SUSP
+    spike = np.concatenate(([False], np.abs(np.diff(lat_g)) > LAT_SPIKE_G))
+    lat_clean = lat_g[~(airborne | spike)]
+    lat_p99 = round(float(np.percentile(lat_clean, 99)), 2) if lat_clean.size else 0.0
+
+    corner_valid = (~(airborne | spike)) & (np.abs(steer) > 0.08) & (speed_ms > 16.7)
+    lat_gated = np.where(corner_valid, lat_g, 0.0)
+    med_dt = float(np.median(dt)) if dt.size else 1 / 60
+    w = max(2, int(round(0.4 / max(med_dt, 1e-3))))
+    if lat_gated.size >= w:
+        windows = np.lib.stride_tricks.sliding_window_view(lat_gated, w)
+        lat_sustained = round(float(windows.min(axis=1).max()), 2)
+    else:
+        lat_sustained = 0.0
+
+    # Observed peaks: instantaneous wire power/torque during valid pulls
+    # only (near-full throttle, engine well above idle, sustained). These
+    # are session observations, NOT the garage's rated build figures.
+    power_w = sd.col("Power")[sl]
+    torque_nm = sd.col("Torque")[sl]
+    idle = sd.col("EngineIdleRpm")[sl]
+    pull = (accel >= PEAK_THROTTLE) & (rpm > np.maximum(idle * 1.2, 1500.0))
+    if PEAK_SUSTAIN_FRAMES > 1 and pull.size >= PEAK_SUSTAIN_FRAMES:
+        sustained = pull.copy()
+        for k in range(1, PEAK_SUSTAIN_FRAMES):
+            sustained[k:] &= pull[:-k]
+    else:
+        sustained = pull
+    peak_power_kw = round(float(np.max(power_w[sustained])) / 1000.0, 1) if np.any(sustained) else None
+    peak_torque = round(float(np.max(torque_nm[sustained])), 0) if np.any(sustained) else None
+
+    on_limiter = (rpm_max > 0) & (rpm >= rpm_max * LIMITER_RPM_FRAC)
+
+    upshift_idx = np.where(np.diff(gear) > 0)[0] if gear.size > 1 else np.array([])
+    shift_rpms = rpm[upshift_idx] if upshift_idx.size else np.array([])
+
+    return {
+        "duration_s": round(float(np.sum(dt)), 2),
+        # Integrated from speed rather than DistanceTraveled, which is
+        # event-relative in Horizon (can sit negative or reset in free roam).
+        "distance_m": round(float(np.sum(speed_ms * dt)), 1),
+        "speed": {
+            "avg_kmh": round(_wavg(speed_kmh), 1),
+            "max_kmh": round(float(np.max(speed_kmh)) if speed_kmh.size else 0.0, 1),
+        },
+        "inputs": {
+            "pct_full_throttle": round(_pct(accel >= FULL_THROTTLE, dt), 1),
+            "pct_braking": round(_pct(brake >= BRAKING_MIN, dt), 1),
+        },
+        "tyres_c": {
+            w: {
+                "avg": round(_awavg(t), 1),
+                "median": round(_amed(t), 1),
+                "max": round(float(np.max(t)) if t.size else 0.0, 1),
+            }
+            for w, t in zip(WHEELS, temps_c)
+        },
+        "temps_active_driving_only": True,
+        "temp_front_avg_c": round(float(np.mean(front_temps)), 1),
+        "temp_rear_avg_c": round(float(np.mean(rear_temps)), 1),
+        "temp_fr_delta_c": round(
+            float(np.mean(front_temps) - np.mean(rear_temps)), 1
+        ),
+        "balance": {
+            "understeer_index": round(usi, 4),
+            "front_slip_angle_corner_avg": round(front_sa_corner, 4),
+            "rear_slip_angle_corner_avg": round(rear_sa_corner, 4),
+            "pct_cornering": round(_pct(cornering, dt), 1),
+            "pct_drifting": round(_pct(drifting, dt), 1),
+            "front_slide_time_s": front_slide_g["total_s"],
+            "rear_slide_time_s": rear_slide_g["total_s"],
+            "front_slide_events": front_slide_g["events"],
+            "rear_slide_events": rear_slide_g["events"],
+            "front_slide_longest_s": front_slide_g["longest_s"],
+            "rear_slide_longest_s": rear_slide_g["longest_s"],
+            "phases": phases,
+        },
+        "traction": {
+            "drivetrain": {0: "FWD", 1: "RWD", 2: "AWD"}.get(dt_type, "?"),
+            "driven_wheels": [WHEELS[i] for i in driven_idx],
+            "driven_slip_peak": round(float(np.max(driven_slip)) if driven_slip.size else 0.0, 2),
+            "driven_slip_p95": round(float(np.percentile(driven_slip, 95)) if driven_slip.size else 0.0, 2),
+            "wheelspin_events": wheelspin_g["events"],
+            "wheelspin_total_s": wheelspin_g["total_s"],
+            "wheelspin_longest_s": wheelspin_g["longest_s"],
+            "brake_lock_events": lock_front_g["events"] + lock_rear_g["events"],
+            "brake_lock_front_events": lock_front_g["events"],
+            "brake_lock_front_s": lock_front_g["total_s"],
+            "brake_lock_rear_events": lock_rear_g["events"],
+            "brake_lock_rear_s": lock_rear_g["total_s"],
+            "braking_time_s": round(braking_time_s, 1),
+            "lock_pct_of_braking": lock_pct_of_braking,
+        },
+        "observed_peaks": {
+            "power_kw": peak_power_kw,
+            "torque_nm": peak_torque,
+            "samples": int(np.sum(sustained)),
+            "coverage_s": round(float(np.sum(dt[sustained])), 1),
+            "note": "session observations during valid pulls (throttle ≥95%, "
+                    "sustained), not the garage's rated figures",
+        },
+        "suspension": {
+            w: {
+                "avg": round(_wavg(s), 3),
+                "max": round(float(np.max(s)) if s.size else 0.0, 3),
+            }
+            for w, s in zip(WHEELS, susp)
+        },
+        "suspension_bottom_out_events": bottom_out,
+        "suspension_bottom_raw_crossings": bottom_raw_crossings,
+        "suspension_bottom_longest_s": bottom_longest,
+        "suspension_time_at_bottom_s": time_at_bottom,
+        "suspension_travel_p99": travel_p99,
+        "gearing": {
+            # Forza emits gear 0 for reverse and >=11 for neutral; only real
+            # forward gears count as "top gear".
+            "top_gear": int(np.max(gear[(gear >= 1) & (gear <= 10)]))
+            if np.any((gear >= 1) & (gear <= 10)) else 0,
+            "pct_on_limiter": round(_pct(on_limiter, dt), 1),
+            "shift_rpm_avg": round(float(np.mean(shift_rpms)), 0) if shift_rpms.size else None,
+            "shift_count": int(shift_rpms.size),
+        },
+        "max_lat_g": round(float(np.max(lat_g)) if lat_g.size else 0.0, 2),
+        "lat_g_p99": lat_p99,
+        "lat_g_sustained": lat_sustained,
+    }
+
+
+def _temp_verdict(avg_c: float) -> str:
+    if avg_c < TEMP_COLD_C:
+        return "cold"
+    if avg_c > TEMP_HOT_C:
+        return "hot"
+    return "in window"
+
+
+def _balance_verdict(session_stats: Dict[str, Any]) -> Dict[str, Any]:
+    b = session_stats["balance"]
+    usi = b["understeer_index"]
+    front_sa = b["front_slip_angle_corner_avg"]
+    rear_sa = b["rear_slip_angle_corner_avg"]
+    front_t, rear_t = b["front_slide_time_s"], b["rear_slide_time_s"]
+    drift_pct = b.get("pct_drifting", 0.0)
+
+    if b.get("pct_cornering", 0.0) < MIN_CORNERING_PCT:
+        verdict = "insufficient cornering data"
+    elif usi > USI_UNDERSTEER and front_sa > 0.6:
+        verdict = "understeer"
+    elif usi < USI_OVERSTEER or (rear_sa > 0.8 and usi < 0):
+        verdict = "oversteer"
+    elif rear_t > 2 * front_t and rear_t > 1.0:
+        verdict = "oversteer"
+    else:
+        verdict = "neutral"
+    return {"verdict": verdict, "understeer_index": usi,
+            "front_slip_angle_corner_avg": front_sa,
+            "rear_slip_angle_corner_avg": rear_sa,
+            "front_slide_time_s": front_t, "rear_slide_time_s": rear_t,
+            "pct_drifting": drift_pct,
+            "caveat": ("significant drifting/opposite-lock in this session; "
+                       "balance judged on grip-driving frames only")
+            if drift_pct > 10.0 else None}
+
+
+def lap_report(sd: SessionData) -> Dict[str, Any]:
+    """Full lap breakdown + session aggregates + tuning verdicts."""
+    if sd.n == 0:
+        return {"has_laps": False, "laps": [], "session": None, "verdicts": None}
+
+    segments = _seg_indices(sd)
+    has_laps = any(s["lap"] is not None for s in segments)
+
+    laps: List[Dict[str, Any]] = []
+    has_runs = False
+    if has_laps:
+        for seg in segments:
+            stats = _slice_stats(sd, seg["i0"], seg["i1"])
+            t = _lap_time(sd, seg)
+            if seg["lap"] is not None and seg["complete"] and (
+                t is None or t < MIN_LAP_S
+            ):
+                continue  # glitch segment (e.g. restart)
+            laps.append({
+                "lap": seg["lap"],
+                "complete": seg["complete"],
+                "time_s": round(t, 3) if t else None,
+                **stats,
+            })
+    else:
+        # No lap markers — look for free-roam time-attack runs (staged
+        # negative DistanceTraveled crossing 0 at launch).
+        runs = detect_runs(sd)
+        if runs:
+            has_runs = True
+            for n, run in enumerate(runs, start=1):
+                stats = _slice_stats(sd, run["i0"], run["i1"])
+                laps.append({
+                    "lap": None,
+                    "run": n,
+                    "complete": True,
+                    "time_s": run["time_s"],
+                    "route_m": run["route_m"],
+                    **stats,
+                })
+        else:
+            for seg in segments:
+                stats = _slice_stats(sd, seg["i0"], seg["i1"])
+                laps.append({
+                    "lap": None,
+                    "complete": False,
+                    "time_s": None,
+                    **stats,
+                })
+
+    session_stats = _slice_stats(sd, 0, sd.n)
+    complete_times = [
+        l["time_s"] for l in laps
+        if l["complete"] and l["time_s"] and l.get("lap") is not None
+    ]
+    if has_runs:
+        complete_times = [l["time_s"] for l in laps if l.get("run") and l["time_s"]]
+    verdicts = {
+        "balance": _balance_verdict(session_stats),
+        "tyre_temps": {
+            "front": {
+                "avg_c": session_stats["temp_front_avg_c"],
+                "verdict": _temp_verdict(session_stats["temp_front_avg_c"]),
+            },
+            "rear": {
+                "avg_c": session_stats["temp_rear_avg_c"],
+                "verdict": _temp_verdict(session_stats["temp_rear_avg_c"]),
+            },
+            "window_c": [TEMP_COLD_C, TEMP_HOT_C],
+        },
+    }
+    return {
+        "has_laps": has_laps,
+        "has_runs": has_runs,
+        "laps": laps,
+        "best_lap_s": round(min(complete_times), 3) if complete_times else None,
+        "session": session_stats,
+        "verdicts": verdicts,
+    }

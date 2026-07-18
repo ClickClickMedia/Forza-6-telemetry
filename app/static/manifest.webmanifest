@@ -1,0 +1,25 @@
+{
+  "name": "Forza Horizon 6 Telemetry",
+  "short_name": "FH6 Telemetry",
+  "description": "Live telemetry dashboard for Forza Horizon 6",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16130F",
+  "theme_color": "#16130F",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
