@@ -8,6 +8,7 @@ analysis / comparison / debug pages.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
 import time
@@ -128,9 +129,14 @@ async def lifespan(app: FastAPI):
 
         def work() -> None:
             try:
-                from .laps import lap_report
+                from .laps import compact_summary, lap_report
                 sd = load_session(raw_path, raw_format)
-                best = lap_report(sd).get("best_lap_s")
+                rep = lap_report(sd)
+                best = rep.get("best_lap_s")
+                summary = compact_summary(rep)
+                if summary:
+                    state.db.set_session_summary(
+                        session_id, json.dumps(summary))
                 if best:
                     state.db.update_best_lap(session_id, best)
                     log.info("best time computed",
@@ -142,6 +148,42 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=work, name=f"best-{session_id}", daemon=True).start()
 
     state.recorder.on_closed = _compute_best_after_close
+
+    def _backfill_summaries() -> None:
+        """One-time catch-up: sessions recorded before the lineage feature
+        get their compact summary computed in the background so tune
+        comparisons work on existing data. Skips anything unreadable."""
+        import threading
+
+        def work() -> None:
+            from .laps import compact_summary, lap_report
+            todo = state.db.sessions_missing_summary()
+            done = 0
+            for sid in todo:
+                row = state.db.get_session(sid)
+                if not row or not row.get("raw_path"):
+                    continue
+                path = settings.sessions_dir / row["raw_path"]
+                if not path.exists():
+                    continue
+                try:
+                    rep = lap_report(load_session(path, row.get("raw_format", "csv")))
+                    summary = compact_summary(rep)
+                    if summary:
+                        state.db.set_session_summary(sid, json.dumps(summary))
+                        done += 1
+                    time.sleep(1.0)  # stay out of the live loop's way
+                except Exception:
+                    log.exception("summary backfill failed",
+                                  extra={"extra": {"session_id": sid}})
+            if done:
+                log.info("session summaries backfilled",
+                         extra={"extra": {"count": done}})
+
+        threading.Thread(target=work, name="summary-backfill",
+                         daemon=True).start()
+
+    _backfill_summaries()
     state.hub.on_frame = state.recorder.feed
     state.receiver = UDPReceiver(state.hub, settings.udp_host, settings.udp_port)
     if stored_forward:
@@ -533,7 +575,7 @@ async def session_route(session_id: int, colour_by: str = "speed") -> Dict[str, 
 
 @app.get("/api/sessions/{session_id}/laps")
 async def session_laps(session_id: int) -> Dict[str, Any]:
-    from .laps import lap_report
+    from .laps import compact_summary, lap_report
     row = _session_or_404(session_id)
     sd = _load_or_404(row)
     result = lap_report(sd)
@@ -543,7 +585,26 @@ async def session_laps(session_id: int) -> Dict[str, Any]:
     best = result.get("best_lap_s")
     if best and row.get("best_lap") != best:
         _state().db.update_best_lap(session_id, best)
+    summary = compact_summary(result)
+    if summary:
+        _state().db.set_session_summary(session_id, json.dumps(summary))
     return result
+
+
+def _lineage_for(row: Dict[str, Any]) -> list:
+    """Earlier sessions with the same car, decorated with their stored
+    summaries — the report's tune-comparison baseline."""
+    ordinal = row.get("car_ordinal")
+    if not ordinal:
+        return []
+    out = []
+    for prev in _state().db.sessions_for_car(ordinal, row["id"]):
+        try:
+            prev["summary"] = json.loads(prev.get("summary_json") or "null")
+        except (TypeError, ValueError):
+            prev["summary"] = None
+        out.append(prev)
+    return out
 
 
 @app.get("/api/sessions/{session_id}/tuning.md")
@@ -566,6 +627,7 @@ async def session_tuning_md(session_id: int, download: int = 0,
                  "data": _json.loads(srow["data"] or "{}")}
     sd = _load_or_404(row)
     md = build_markdown(sd, row, __version__, setup=setup,
+                        lineage=_lineage_for(row),
                         include_fill_in=(mode != "data"))
     headers = {}
     if download:

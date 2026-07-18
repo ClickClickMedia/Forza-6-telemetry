@@ -88,6 +88,16 @@ class Database:
         self._conn.execute("PRAGMA foreign_keys=ON")
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Additive column migrations for databases created by older builds
+        (CREATE TABLE IF NOT EXISTS never retrofits new columns)."""
+        cols = {r["name"] for r in
+                self._conn.execute("PRAGMA table_info(sessions)")}
+        if "summary_json" not in cols:
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN summary_json TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -239,6 +249,36 @@ class Database:
                 "UPDATE sessions SET best_lap = ? WHERE id = ?",
                 (best_lap, session_id),
             )
+
+    def set_session_summary(self, session_id: int, summary_json: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sessions SET summary_json = ? WHERE id = ?",
+                (summary_json, session_id),
+            )
+
+    def sessions_missing_summary(self) -> List[int]:
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id FROM sessions
+                   WHERE summary_json IS NULL AND ended_at IS NOT NULL
+                   ORDER BY id"""
+            ).fetchall()
+        return [int(r["id"]) for r in rows]
+
+    def sessions_for_car(self, car_ordinal: int, exclude_id: int,
+                         limit: int = 6) -> List[Dict[str, Any]]:
+        """Earlier sessions with the same car, newest first — the tune
+        lineage a report compares against."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, name, created_at, notes, best_lap, summary_json
+                   FROM sessions
+                   WHERE car_ordinal = ? AND id != ? AND ended_at IS NOT NULL
+                   ORDER BY id DESC LIMIT ?""",
+                (car_ordinal, exclude_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     # -- Setups ------------------------------------------------------------
     def add_setup(self, car_ordinal: int, label: str, created_at: str,

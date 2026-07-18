@@ -100,6 +100,11 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any]) ->
             f"target the fix there first")
     if bal.get("caveat"):
         add(f"- ⚠ {bal['caveat']}")
+    add("- These verdicts describe the car's **character**, not the tune's "
+        "success — a faster car often carries more corner speed and shows "
+        "*worse* balance numbers. If lap time improved since the last "
+        "session, the tune worked; treat this section as \"what limits the "
+        "car now\", never as a reason to revert a faster setup.")
     add("")
 
 
@@ -171,14 +176,72 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
     add("")
 
 
+def _lineage_section(add, lineage: List[Dict[str, Any]],
+                     include_guidance: bool) -> None:
+    """Earlier sessions with the same car: the before/after evidence a tune
+    iteration is judged against."""
+    rows = []
+    note_lines = []
+    for prev in lineage:
+        s = prev.get("summary") or {}
+        best = s.get("best_s") or prev.get("best_lap")
+        best_txt = _fmt_lap_time(best) if best else "–"
+        if best and s.get("timing") == "runs":
+            best_txt += " (run)"
+        rows.append([
+            prev.get("name", "?"),
+            (prev.get("created_at") or "")[:10],
+            best_txt,
+            f"{s['usi']:+.3f}" if s.get("usi") is not None else "–",
+            (f"{s['spin_total_s']:.1f} ({s.get('spin_multi_s') or 0:.1f} multi)"
+             if s.get("spin_total_s") is not None else "–"),
+            f"{s['lock_s']:.1f}" if s.get("lock_s") is not None else "–",
+            (f"{s['temp_f_c']:.0f}/{s['temp_r_c']:.0f}"
+             if s.get("temp_f_c") is not None else "–"),
+            f"{s['max_kmh']:.0f}" if s.get("max_kmh") is not None else "–",
+            str(s.get("shifts")) if s.get("shifts") is not None else "–",
+        ])
+        note = (prev.get("notes") or "").strip()
+        if note:
+            note_lines.append(f"- {prev.get('name', '?')}: {note}")
+    add("## Tune lineage — earlier sessions with this car")
+    add("")
+    add("*(Same Forza ordinal, newest first. \"(run)\" times cover a whole "
+        "staged event, not one lap — only compare like with like, and only "
+        "treat a row as a baseline if the route and build match; ask me if "
+        "unsure.)*")
+    add("")
+    add(_md_table(
+        ["Session", "Date", "Best", "USI", "Wheelspin s", "Lock s",
+         "F/R °C", "Max km/h", "Shifts"], rows))
+    add("")
+    if note_lines:
+        add("Driver notes on earlier sessions (authoritative results and "
+            "tune versions live here):")
+        for line in note_lines:
+            add(line)
+        add("")
+    if include_guidance:
+        add("**Judge tune changes by the clock first.** Balance and traction "
+            "metrics describe the car's character, not the tune's success — "
+            "a faster session with a worse understeer index is a successful "
+            "tune whose limiting factor has moved. Diagnose the new limit; "
+            "do not chase the old metric back down.")
+        add("")
+
+
 def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                    setup: Dict[str, Any] = None,
-                   include_fill_in: bool = True) -> str:
+                   include_fill_in: bool = True,
+                   lineage: List[Dict[str, Any]] = None) -> str:
     """Render the full tuning report for one session.
 
     ``setup`` embeds saved tuning-screen values (replacing the blank
-    fill-in block); ``include_fill_in=False`` produces the telemetry-only
-    variant ("copy data only").
+    fill-in block); ``include_fill_in=False`` produces the data-only
+    variant ("copy data only"): telemetry, derived values and lineage, but
+    no handling headline, no fill-in template and no AI prompt.
+    ``lineage`` lists earlier same-car sessions with their stored
+    summaries for the before/after table.
     """
     rep = lap_report(sd)
     session = rep["session"] or {}
@@ -211,8 +274,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         "compound, pressures, or any tuning-screen setting.")
     add("")
 
+    data_only = not include_fill_in and setup is None
+
     # --- Handling summary: the one thing to fix first, with evidence -----
-    _handling_summary(add, session, verdicts)
+    # (omitted from the data-only export, which carries numbers, not advice)
+    if not data_only:
+        _handling_summary(add, session, verdicts)
 
     add("## Car")
     add("")
@@ -443,6 +510,9 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         ))
         add("")
 
+    if lineage:
+        _lineage_section(add, lineage, include_guidance=not data_only)
+
     if setup is not None:
         _setup_section(add, setup)
     elif include_fill_in:
@@ -470,16 +540,17 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "setup-specific advice, ask me for my current settings.)*")
         add("")
 
-    add("## Prompt for the AI")
-    add("")
-    if not car_name:
-        add(f"**Step 0 — ask me first:** this tool only knows the car as "
-            f"Forza ordinal {meta.get('car_ordinal', '?')}. Before any "
-            f"analysis, ask me the year, make, model and my key build "
-            f"choices (engine/aspiration swaps, tyre compound, aero), and "
-            f"use my answer as the car identity throughout.")
+    if not data_only:
+        add("## Prompt for the AI")
         add("")
-    add(AI_PROMPT)
+        if not car_name:
+            add(f"**Step 0 — ask me first:** this tool only knows the car as "
+                f"Forza ordinal {meta.get('car_ordinal', '?')}. Before any "
+                f"analysis, ask me the year, make, model and my key build "
+                f"choices (engine/aspiration swaps, tyre compound, aero), and "
+                f"use my answer as the car identity throughout.")
+            add("")
+        add(AI_PROMPT)
     return "\n".join(lines)
 
 

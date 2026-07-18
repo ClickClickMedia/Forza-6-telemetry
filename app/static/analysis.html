@@ -34,6 +34,7 @@
             <h2 id="sessName" style="margin:0;">–</h2>
             <span id="sessMeta" class="eyebrow"></span>
             <button id="btnNameCar" class="unit-toggle hidden" style="margin-left:6px;">✎ name car</button>
+            <button id="btnNote" class="unit-toggle" style="margin-left:6px;">✎ result note</button>
           </div>
           <div class="btnrow">
             <span class="pill" id="pillFrames">–</span>
@@ -458,6 +459,9 @@
         (s.suspension_bottom_out_events || 0) + " bottom-out event(s) at ≥0.98 travel");
 
       document.getElementById("notes").textContent = meta.notes || "";
+      const noteBtn = document.getElementById("btnNote");
+      noteBtn.textContent = meta.notes ? "✎ edit note" : "✎ result note";
+      noteBtn.dataset.current = meta.notes || "";
     }
 
     function renderEvents(a, rep) {
@@ -537,6 +541,25 @@
         colourBy = b.getAttribute("data-colour");
         loadRoute();
       });
+    });
+
+    // The session note travels into AI reports ("Driver notes") and the
+    // tune-lineage table — the home for the game's official result time
+    // and the tune version tested, which telemetry cannot know.
+    document.getElementById("btnNote").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const notes = prompt(
+        "Session note for AI reports. Best place for the official result " +
+        "and tune version, e.g. \"official 1:34.612 — diff tune v3\":",
+        btn.dataset.current || "");
+      if (notes === null) return;
+      try {
+        await api("/api/sessions/" + sessionId, { method: "PATCH", json: { notes } });
+        btn.dataset.current = notes;
+        btn.textContent = notes ? "✎ edit note" : "✎ result note";
+        document.getElementById("notes").textContent = notes;
+        toast(notes ? "Note saved — it rides along in every AI copy" : "Note cleared");
+      } catch (err) { toast("Save failed: " + err.message); }
     });
 
     document.getElementById("btnNameCar").addEventListener("click", async (e) => {

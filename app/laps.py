@@ -737,3 +737,34 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
         "session": session_stats,
         "verdicts": verdicts,
     }
+
+
+def compact_summary(rep: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Boil a lap_report down to the handful of numbers a later session
+    compares against (persisted per session; drives the tune-lineage table).
+    Keep this small and stable — it is stored, not recomputed."""
+    session = rep.get("session")
+    if not session:
+        return None
+    trac = session.get("traction") or {}
+    bal = (rep.get("verdicts") or {}).get("balance") or {}
+    g = session.get("gearing") or {}
+    return {
+        "best_s": rep.get("best_lap_s"),
+        "timing": ("laps" if rep.get("has_laps")
+                   else "runs" if rep.get("has_runs") else None),
+        "usi": bal.get("understeer_index"),
+        "spin_total_s": trac.get("wheelspin_total_s"),
+        "spin_multi_s": trac.get("wheelspin_multi_s"),
+        "lock_s": round(float(trac.get("brake_lock_front_s") or 0)
+                        + float(trac.get("brake_lock_rear_s") or 0), 1),
+        "near_lock_pct": trac.get("near_lock_pct_of_braking"),
+        "temp_f_c": session.get("temp_front_avg_c"),
+        "temp_r_c": session.get("temp_rear_avg_c"),
+        "max_kmh": (session.get("speed") or {}).get("max_kmh"),
+        "shifts": g.get("shift_count"),
+        "limiter_pct": g.get("pct_on_limiter"),
+        "lat_g": session.get("lat_g_sustained"),
+        "duration_s": session.get("duration_s"),
+        "distance_km": round((session.get("distance_m") or 0) / 1000.0, 2),
+    }

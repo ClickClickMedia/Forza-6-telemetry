@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.8] - 2026-07-18
+
+### Added
+- **Tune lineage**: reports now include a before/after table of earlier
+  sessions with the same car (best time, understeer index, wheelspin,
+  locks, temps, max speed, shifts), built from a compact summary stored
+  per session. Existing sessions are backfilled in the background on
+  first launch. Times from staged events are marked "(run)" so whole-race
+  times never get compared against single laps.
+- **Result note** button on the Analysis page: record the game's official
+  result time and the tune version tested; it rides along in every AI
+  copy and in the lineage table of later sessions.
+- The report now tells the AI to **judge tune changes by the clock
+  first** — balance metrics describe the car's character, and a faster
+  session with worse balance numbers is a successful tune whose limit
+  moved, never a reason to revert.
+
+### Fixed
+- **"Copy data only" is now genuinely data-only**: no AI prompt, no
+  handling headline, no coaching — telemetry, derived values, lineage and
+  data-quality notes only.
+
 ## [2.1.7] - 2026-07-18
 
 ### Added
