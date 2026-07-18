@@ -319,11 +319,49 @@
       return;
     }
 
+    // Teleports (event staging, fast travel) create huge position jumps.
+    // Two consequences handled here:
+    //   1. never draw a line across a jump (pen up), and
+    //   2. never let a stray far-away blip set the map's zoom — split each
+    //      polyline into segments at jumps and IGNORE trivial segments
+    //      (<1% of driven length or <3 points) when computing bounds, so
+    //      the actual route fills the canvas instead of hiding in a corner.
+    const JUMP_M = 400;
+
+    function segments(g) {
+      const segs = [];
+      let cur = [0];
+      for (let i = 1; i < g.x.length; i++) {
+        if (Math.hypot(g.x[i] - g.x[i - 1], g.z[i] - g.z[i - 1]) > JUMP_M) {
+          segs.push(cur);
+          cur = [];
+        }
+        cur.push(i);
+      }
+      if (cur.length) segs.push(cur);
+      let total = 0;
+      const withLen = segs.map((idx) => {
+        let len = 0;
+        for (let k = 1; k < idx.length; k++) {
+          len += Math.hypot(g.x[idx[k]] - g.x[idx[k - 1]],
+                            g.z[idx[k]] - g.z[idx[k - 1]]);
+        }
+        total += len;
+        return { idx, len };
+      });
+      const kept = withLen.filter(s => s.idx.length >= 3 && s.len >= total * 0.01);
+      return kept.length ? kept : withLen; // never filter down to nothing
+    }
+
+    const groupSegs = groups.map((g) => ({ g, segs: segments(g) }));
+
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (const g of groups) for (let i = 0; i < g.x.length; i++) {
-      const x = g.x[i], z = g.z[i];
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    for (const { g, segs } of groupSegs) {
+      for (const s of segs) for (const i of s.idx) {
+        const x = g.x[i], z = g.z[i];
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+      }
     }
     const rngX = maxX - minX || 1, rngZ = maxZ - minZ || 1;
     const scale = Math.min((w - 2 * pad) / rngX, (h - 2 * pad) / rngZ);
@@ -331,23 +369,15 @@
     const px = x => offX + (x - minX) * scale;
     const pz = z => offZ + (maxZ - z) * scale;
 
-    // Teleports (event staging, fast travel) create huge position jumps
-    // that would draw as long straight lines across the map — lift the pen
-    // over any implausible jump instead. 400 m between consecutive
-    // downsampled points is far beyond real driving.
-    const JUMP_M = 400;
-
     if (opts.multi && opts.multi.length) {
-      for (const g of groups) {
+      for (const { g, segs } of groupSegs) {
         ctx.beginPath();
-        let started = false;
-        for (let i = 0; i < g.x.length; i++) {
-          const X = px(g.x[i]), Z = pz(g.z[i]);
-          if (i > 0 && Math.hypot(g.x[i] - g.x[i - 1], g.z[i] - g.z[i - 1]) > JUMP_M) {
-            started = false;
+        for (const s of segs) {
+          for (let k = 0; k < s.idx.length; k++) {
+            const i = s.idx[k];
+            if (k === 0) ctx.moveTo(px(g.x[i]), pz(g.z[i]));
+            else ctx.lineTo(px(g.x[i]), pz(g.z[i]));
           }
-          if (!started) { ctx.moveTo(X, Z); started = true; }
-          else ctx.lineTo(X, Z);
         }
         ctx.strokeStyle = g.color || P.amber;
         ctx.lineWidth = opts.lineWidth || 2.4;
@@ -357,7 +387,7 @@
       return;
     }
 
-    const g = groups[0];
+    const { g, segs } = groupSegs[0];
     const c = g.c || [];
     let cMin = opts.cMin, cMax = opts.cMax;
     if (cMin === undefined || cMax === undefined) {
@@ -368,20 +398,22 @@
     }
     ctx.lineWidth = opts.lineWidth || 3;
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    for (let i = 1; i < g.x.length; i++) {
-      if (Math.hypot(g.x[i] - g.x[i - 1], g.z[i] - g.z[i - 1]) > JUMP_M) {
-        continue; // teleport — don't draw a line across the map
+    for (const s of segs) {
+      for (let k = 1; k < s.idx.length; k++) {
+        const i = s.idx[k], j = s.idx[k - 1];
+        const v = c.length ? c[i] : 0.5;
+        const t = c.length ? clamp((v - cMin) / (cMax - cMin), 0, 1) : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(px(g.x[j]), pz(g.z[j]));
+        ctx.lineTo(px(g.x[i]), pz(g.z[i]));
+        ctx.strokeStyle = rampRGB(t);
+        ctx.stroke();
       }
-      const v = c.length ? c[i] : 0.5;
-      const t = c.length ? clamp((v - cMin) / (cMax - cMin), 0, 1) : 0.5;
-      ctx.beginPath();
-      ctx.moveTo(px(g.x[i - 1]), pz(g.z[i - 1]));
-      ctx.lineTo(px(g.x[i]), pz(g.z[i]));
-      ctx.strokeStyle = rampRGB(t);
-      ctx.stroke();
     }
+    // Start marker on the first DRAWN segment (not a filtered-out blip).
+    const first = segs[0].idx[0];
     ctx.fillStyle = P.paint;
-    ctx.beginPath(); ctx.arc(px(g.x[0]), pz(g.z[0]), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px(g.x[first]), pz(g.z[first]), 4, 0, Math.PI * 2); ctx.fill();
   }
 
   // --------------------------------------------------- canvas: bar chart

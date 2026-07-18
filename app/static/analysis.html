@@ -344,8 +344,22 @@
       document.getElementById("notes").textContent = meta.notes || "";
     }
 
-    function renderEvents(a) {
+    function renderEvents(a, rep) {
       const ev = a.events || {};
+      // Wheelspin/brake-lock come from the drivetrain-aware grouped
+      // detector (same numbers as the verdict card above) — never mix two
+      // detectors on one page.
+      const trac = ((rep || {}).session || {}).traction || {};
+      const values = {
+        wheelspin: trac.wheelspin_events,
+        brake_lock: trac.brake_lock_events,
+        oversteer_candidates: ev.oversteer_candidates,
+        understeer_candidates: ev.understeer_candidates,
+        suspension_bottom_out: ev.suspension_bottom_out,
+        suspension_full_extension: ev.suspension_full_extension,
+        rear_slip_on_power: ev.rear_slip_on_power,
+        front_slip_while_steering: ev.front_slip_while_steering
+      };
       const nice = {
         wheelspin: "Wheelspin", brake_lock: "Brake lock",
         oversteer_candidates: "Oversteer moments", understeer_candidates: "Understeer moments",
@@ -354,7 +368,7 @@
       };
       document.getElementById("eventsGrid").innerHTML = Object.keys(nice).map((k) =>
         '<div class="stat"><span class="eyebrow">' + nice[k] + '</span><span class="v">' +
-        fmt(ev[k], 0) + "</span></div>"
+        fmt(values[k], 0) + "</span></div>"
       ).join("");
 
       const gu = a.gear_usage_s || {};
@@ -385,7 +399,7 @@
         renderSession(rep, rep.session_meta || {});
         renderVerdicts(rep);
         renderLaps(rep);
-        renderEvents(a);
+        renderEvents(a, rep);
         loadRoute();
       } catch (e) { showMsg("Failed to load analysis: " + e.message); }
     }

@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-07-18
+
+### Fixed
+- **Route maps auto-zoom to the driven route.** A single stray point from
+  before an event teleport could set the map's bounds, shrinking a touge
+  route to a corner thumbnail — bounds now ignore trivial segments (<1% of
+  driven length), so the route fills the canvas. Applies to analysis and
+  comparison maps.
+- The Analysis page's events grid showed different wheelspin/brake-lock
+  numbers than the verdict card above it (two detector generations on one
+  page); both now read from the drivetrain-aware grouped detector.
+
 ## [2.0.0] - 2026-07-18
 
 First public release.
@@ -55,4 +67,5 @@ First public release.
   physics cross-check (`Speed` must equal `|Velocity|`). Recordings made
   with early mis-decoded builds are rescued automatically.
 
+[2.0.1]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.1
 [2.0.0]: https://github.com/ClickClickMedia/Forza-6-telemetry/releases/tag/v2.0.0
