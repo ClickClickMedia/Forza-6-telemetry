@@ -19,9 +19,10 @@ with tuning-grade stats**, and exports a report you can paste straight into
 | --- | --- | --- |
 | ![Live dashboard on a phone — tyre pods, RPM, pedal ribbons](docs/images/live-dashboard.jpg) | ![Session analysis — named car, best lap, balance and tyre verdicts](docs/images/analysis-session.jpg) | ![Lap splits and the speed-coloured route map](docs/images/analysis-laps-route.jpg) |
 
-*Real screenshots from a phone on the sofa — a drift session with the rears
-cooked at 126 °C, and a 3-lap race the game sent no lap data for, timed
-anyway by detecting start-line returns.*
+*Real screenshots from a phone on the sofa — a Formula Drift ute being
+tuned into a circuit racer (rears cooked at 126 °C mid-lap), and a 3-lap
+race the game sent no lap data for, timed anyway by detecting start-line
+returns.*
 
 The live view is built like an instrument, not a website: huge numerals that
 never shift layout, tyre pods coloured by the **temperature window** (blue
@@ -101,8 +102,8 @@ it.
 
 ### The loop in action
 
-Real ChatGPT replies from one evening of tuning a RWD drift truck with
-reports copied straight out of this app:
+Real ChatGPT replies from one evening spent turning a RWD Formula Drift
+ute into a circuit racer, with reports copied straight out of this app:
 
 | One precise change per test | Honest about what "worse" means |
 | --- | --- |
