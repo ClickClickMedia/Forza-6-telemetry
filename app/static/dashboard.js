@@ -175,8 +175,8 @@
     el.brkV.textContent = fmt(tgt.brk, 0) + "%";
     el.steerV.textContent = (tgt.steer >= 0 ? "+" : "") + tgt.steer.toFixed(2);
     el.gText.textContent =
-      (tgt.gLong >= 0 ? "+" : "") + tgt.gLong.toFixed(2) + " / " +
-      (tgt.gLat >= 0 ? "+" : "") + tgt.gLat.toFixed(2) + " g";
+      (tgt.gLong >= 0 ? "+" : "") + tgt.gLong.toFixed(1) + " / " +
+      (tgt.gLat >= 0 ? "+" : "") + tgt.gLat.toFixed(1) + " g";
 
     // car identity
     if (d.car_ordinal != null && d.car_ordinal !== 0) {
