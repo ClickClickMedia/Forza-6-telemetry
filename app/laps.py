@@ -33,11 +33,15 @@ LIMITER_RPM_FRAC = 0.97   # fraction of EngineMaxRpm counted as "on limiter"
 COMBINED_SLIP_HIGH = 1.0  # combined slip beyond this = sliding
 SUSP_BOTTOM_OUT = 0.98
 
-# Tyre temperature working window (deg C) used for verdicts. Horizon tyres
-# run cooler than real-life race rubber; this band tracks community practice
-# for road/race compounds. One value per tyre on the wire (no I/M/O split).
-TEMP_COLD_C = 60.0
-TEMP_HOT_C = 105.0
+# Tyre temperature working window (deg C) used for verdicts, calibrated to
+# community practice (ForzaTune guide + Forza forums physics threads):
+# optimal grip ~88-99 C (190-210 F), usable street band ~77-121 C
+# (170-250 F). "In window" here = 77-99 C: warm enough to work, at or below
+# the optimal band's top. One value per tyre on the wire (no
+# inner/middle/outer split — that's the in-game HUD only, not Data Out).
+# Keep aligned with TEMP in app/static/app.js.
+TEMP_COLD_C = 77.0
+TEMP_HOT_C = 99.0
 
 # Balance thresholds on the understeer index (front minus rear mean
 # normalized slip angle while cornering on grip; Forza slip channels are

@@ -30,10 +30,13 @@ The Horizon layout relative to FM7 "Dash":
 
     * The packet is exactly **324 bytes**.
     * Horizon titles **insert 12 bytes** between ``NumCylinders`` and
-      ``PositionX`` (offsets 232..243). The first 4 bytes decode as a small
-      stable per-car int we expose as ``CarGroup`` (Horizon car
-      category/group); the remaining 8 bytes have always read as zero in our
-      captures and are exposed as ``Unknown1``/``Unknown2`` (f32).
+      ``PositionX`` (offsets 232..243). Per the official FH6 Data Out
+      documentation these are ``CarGroup`` (stable per-car category int,
+      s32), ``SmashableVelDiff`` and ``SmashableMass`` (f32 each — impact
+      metadata, observed 0.0 outside collisions). Note: v1.0.x of this
+      project had these *names* right but the *geometry* wrong (a 13-byte
+      block with a pad byte before ``PositionX``) — the one-byte error that
+      corrupted the whole dash tail.
     * The dash tail (``PositionX`` .. ``NormalizedAIBrakeDifference``) is the
       FM7 "Dash" tail, verbatim, at offsets 244..322.
     * One final byte (offset 323) closes the packet; it has always read 0 and
@@ -132,12 +135,12 @@ _FIELD_TABLE: List[Tuple[str, str]] = [
     ("DrivetrainType", "i"),
     ("NumCylinders", "i"),
     # -- Horizon insertion (12 bytes, offsets 232..243) ---------------------
-    # Present in FH4/FH5/FH6. First int decodes as a small stable per-car
-    # value (car group/category); the two floats have only ever been observed
-    # as 0.0. Captured verbatim so recordings preserve the full wire packet.
+    # Officially documented FH6 fields (absent from Forza Motorsport):
+    # CarGroup is a stable per-car category int; the smashable floats carry
+    # impact metadata and read 0.0 outside collisions.
     ("CarGroup", "i"),
-    ("Unknown1", "f"),
-    ("Unknown2", "f"),
+    ("SmashableVelDiff", "f"),
+    ("SmashableMass", "f"),
     # -- Dash tail (79 bytes, offsets 244..322) -----------------------------
     ("PositionX", "f"),
     ("PositionY", "f"),
@@ -284,8 +287,8 @@ class TelemetryFrame:
     DrivetrainType: int = 0
     NumCylinders: int = 0
     CarGroup: int = 0
-    Unknown1: float = 0.0
-    Unknown2: float = 0.0
+    SmashableVelDiff: float = 0.0
+    SmashableMass: float = 0.0
     PositionX: float = 0.0
     PositionY: float = 0.0
     PositionZ: float = 0.0

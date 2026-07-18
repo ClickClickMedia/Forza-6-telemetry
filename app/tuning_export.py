@@ -127,9 +127,13 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str) -> str:
          for w in WHEELS],
     ))
     add("")
-    window = temps.get("window_c", [60, 105])
+    window = temps.get("window_c", [77, 99])
     add(f"- Working window used for verdicts: {window[0]:.0f}–{window[1]:.0f} °C "
-        f"(one sensor per tyre — Forza exposes no inner/middle/outer split)")
+        f"(community optimal band 88–99 °C, usable 77–121 °C)")
+    add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
+        "**one temperature per tyre** (no inner/middle/outer). Pressure and "
+        "camber advice must come from the setup values filled in below plus "
+        "these axle averages — never from fabricated sensor detail.")
     front = temps.get("front", {})
     rear = temps.get("rear", {})
     add(f"- Front axle avg **{front.get('avg_c', '?')} °C** → {front.get('verdict', '?')} · "

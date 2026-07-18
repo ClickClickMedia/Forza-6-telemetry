@@ -63,8 +63,9 @@ dashboard or `/debug` page looks wrong for your car/game, here's the workflow:
 > Guiding rules for this project, established by live-capture validation:
 > - The packet is **exactly 324 bytes** and decoded **little-endian** — the
 >   FH4/FH5 "Horizon" layout, confirmed against real FH6 telemetry.
-> - The Horizon 12-byte block (`CarGroup`, `Unknown1`, `Unknown2`) sits at
->   offsets **232–243**; the dash tail starts with `PositionX` at **244**; one
+> - The Horizon 12-byte block (`CarGroup`, `SmashableVelDiff`,
+>   `SmashableMass` — the officially documented FH6 fields) sits at offsets
+>   **232–243**; the dash tail starts with `PositionX` at **244**; one
 >   trailing byte (`Unknown3`) closes the packet at **323**.
 > - The strongest validation is physics, not vibes: dash `Speed` must equal
 >   sled `|Velocity|` on every moving frame. A one-byte layout error breaks

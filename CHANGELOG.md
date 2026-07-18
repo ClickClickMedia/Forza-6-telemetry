@@ -12,8 +12,10 @@ All notable changes to this project are documented here. The format is based on
   car-info block" with a pad byte before `PositionX`, shifting every
   dash-tail field one byte late. Live captures prove FH6 emits the exact
   FH4/FH5 324-byte layout (12-byte block at offsets 232–243, dash tail at
-  244, one trailing byte at 323). Validated frame-by-frame: dash `Speed`
-  equals sled `|Velocity|` to 3 decimal places.
+  244, one trailing byte at 323). The block's fields keep their officially
+  documented names — `CarGroup`, `SmashableVelDiff`, `SmashableMass` — v1.0
+  had the names right and the geometry wrong. Validated frame-by-frame:
+  dash `Speed` equals sled `|Velocity|` to 3 decimal places.
 - Tyre temperatures were Fahrenheit on the wire but displayed with a °C
   label. The parser now converts properly; the dashboard defaults to °C with
   a °C/°F toggle (and km/h ↔ mph on the speedo).
@@ -50,6 +52,9 @@ All notable changes to this project are documented here. The format is based on
   table.
 - Live WebSocket payload: `tire_temp` (ambiguous unit) replaced by
   `tire_temp_c` and `tire_temp_f`. Anyone consuming `/ws/live` should update.
+- Tyre working window calibrated to community values: in-window 77–99 °C
+  (optimal band 88–99 °C, usable 77–121 °C), used consistently by the pod
+  colours, verdicts, and tuning report.
 - Synthetic generator now emits Fahrenheit tyre temps (as the real game does)
   and the corrected packet field set.
 

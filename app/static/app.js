@@ -140,8 +140,10 @@
   }
 
   // ------------------------------------------------------- colour language
-  // Tyre working window (°C). Keep aligned with app/laps.py.
-  const TEMP = { cold: 60, hot: 105, over: 118 };
+  // Tyre working window (°C), community-calibrated: optimal 88–99, usable
+  // 77–121. cold < 77 · in-window 77–99 · hot 99–121 · over > 121.
+  // Keep aligned with TEMP_COLD_C/TEMP_HOT_C in app/laps.py.
+  const TEMP = { cold: 77, hot: 99, over: 121 };
 
   function tempClass(c) {
     if (!isFinite(c)) return "cold";

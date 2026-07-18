@@ -112,8 +112,27 @@ it. The workflow:
 The verdicts (understeer/oversteer, temperature window) are computed from
 grip-driving frames only — sustained drifting and opposite-lock moments are
 excluded and reported separately, so a skid-pan session doesn't read as
-"understeer". Thresholds live in [`app/laps.py`](app/laps.py) as documented
-constants; calibration PRs welcome.
+"understeer". The tyre window is community-calibrated (optimal 88–99 °C,
+usable 77–121 °C). Thresholds live in [`app/laps.py`](app/laps.py) as
+documented constants; calibration PRs welcome.
+
+**What this tool won't pretend to know:** Forza's Data Out carries no tyre
+pressures and a single temperature per tyre (the inner/middle/outer readout
+is the in-game HUD only — it is not in the UDP stream). Verdicts here use
+only channels that actually exist; pressure and camber advice comes from the
+setup values you fill into the report.
+
+### Telemetry quirks worth knowing
+
+- **Lap fields populate only in timed events** (races, Rivals, Time Trial).
+  Free roam records fine, but shows as one "stint" with no lap markers.
+- **Time Trial reports no `RacePosition`** — sessions key off `IsRaceOn`
+  and the lap clock, never position.
+- **Rewinds don't rewind telemetry**: the stream keeps flowing and your
+  pre-rewind laps stay in the data; the analyser tolerates the time
+  discontinuity.
+- **Xbox sleep or app-switching kills Data Out** and it won't resume until
+  Forza is restarted — if `pps` drops to 0 mid-session, that's usually why.
 
 ### Connect Claude (MCP)
 
@@ -161,8 +180,12 @@ covered by unit tests ([`tests/test_packet.py`](tests/test_packet.py)):
 The Horizon layout is the FM7 structure with two additions:
 
 - **12 bytes inserted at offsets 232–243** (between `NumCylinders` and
-  `PositionX`): an s32 we expose as `CarGroup` (a small, stable per-car
-  category value) plus 8 bytes that always read zero (`Unknown1`/`Unknown2`).
+  `PositionX`): the officially documented FH6 fields `CarGroup` (s32, a
+  stable per-car category value), `SmashableVelDiff` and `SmashableMass`
+  (f32 impact metadata, 0.0 outside collisions). Most FH5-era parsers still
+  label these bytes "unknown"; v1.0.x of this project had the *names* right
+  but modelled them as a 13-byte block with a pad byte — the one-byte error
+  that corrupted the entire dash tail.
 - **1 trailing byte at offset 323** (`Unknown3`, always observed 0).
 
 So: **232-byte sled + 12-byte Horizon block + 79-byte dash tail (at 244) +

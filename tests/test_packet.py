@@ -69,11 +69,13 @@ def test_known_sled_offsets():
 
 def test_horizon_insertion_block_offsets():
     # Horizon titles insert 12 bytes between NumCylinders and PositionX
-    # (offsets 232..243): CarGroup + two always-zero floats.
+    # (offsets 232..243): CarGroup, SmashableVelDiff, SmashableMass (the
+    # officially documented FH6 fields). v1.0.x had these names but modelled
+    # them as a 13-byte block with a pad byte — the bug this test pins.
     assert FIELD_OFFSETS["NumCylinders"] == 228
     assert FIELD_OFFSETS["CarGroup"] == 232
-    assert FIELD_OFFSETS["Unknown1"] == 236
-    assert FIELD_OFFSETS["Unknown2"] == 240
+    assert FIELD_OFFSETS["SmashableVelDiff"] == 236
+    assert FIELD_OFFSETS["SmashableMass"] == 240
     # ...and PositionX starts the FM7-style dash tail at 244. This exact
     # offset was pinned empirically against live FH6 captures (Speed field
     # matches the sled |Velocity| only at 244; one byte later it decodes to
@@ -157,8 +159,8 @@ def test_roundtrip_known_values():
         "DrivetrainType": 1,
         "NumCylinders": 8,
         "CarGroup": 3,
-        "Unknown1": 1.25,
-        "Unknown2": 900.0,
+        "SmashableVelDiff": 1.25,
+        "SmashableMass": 900.0,
         "Gear": 4,
         "Accel": 255,
         "Brake": 0,
@@ -176,8 +178,8 @@ def test_roundtrip_known_values():
     assert frame.CarOrdinal == 2145
     assert frame.NumCylinders == 8
     assert frame.CarGroup == 3
-    assert abs(frame.Unknown1 - 1.25) < 1e-4
-    assert abs(frame.Unknown2 - 900.0) < 1e-2
+    assert abs(frame.SmashableVelDiff - 1.25) < 1e-4
+    assert abs(frame.SmashableMass - 900.0) < 1e-2
     assert frame.Gear == 4
     assert frame.Steer == -50
     assert frame.LapNumber == 3
