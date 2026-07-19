@@ -193,6 +193,51 @@ def test_wheelspin_uses_driven_wheels_per_drivetrain():
     assert rep["session"]["traction"]["wheelspin_events"] >= 1
 
 
+def test_drivetrain_survives_zeroed_identity_frames():
+    """Loading/menu/results frames zero every identity field, and
+    DrivetrainType 0 means FWD — a single bad frame must never point the
+    traction analyser at the wrong axle (real RWD race read as FWD: the
+    analyser watched the fronts and reported 0.2 s of wheelspin while the
+    rears spun for seconds per hairpin)."""
+    sd = _synthetic_session(seconds=30.0)
+    n = sd.n
+    sd.columns["DrivetrainType"] = np.full(n, 1.0)   # RWD
+    sd.columns["CarOrdinal"] = np.full(n, 455.0)
+    # Zero identity at both ends, exactly like the real capture.
+    for col in ("DrivetrainType", "CarOrdinal"):
+        sd.columns[col][:120] = 0.0
+        sd.columns[col][-120:] = 0.0
+    sd.columns["Accel"] = np.full(n, 255.0)
+    sd.columns["HandBrake"] = np.zeros(n)
+    spin = np.full(n, 1.5)
+    for w in ("RearLeft", "RearRight"):
+        sd.columns[f"TireSlipRatio{w}"] = spin
+    for w in ("FrontLeft", "FrontRight"):
+        sd.columns[f"TireSlipRatio{w}"] = np.zeros(n)
+    trac = lap_report(sd)["session"]["traction"]
+    assert trac["drivetrain"] == "RWD"
+    assert trac["driven_wheels"] == ["RL", "RR"], \
+        "RWD must never watch FL/FR"
+    assert trac["wheelspin_total_s"] > 5.0, \
+        "rear wheelspin must be counted, not the silent fronts"
+
+
+def test_export_suppresses_traction_on_drivetrain_mismatch():
+    """Defence in depth: if car metadata and the analyser ever disagree
+    again, the report must fail loudly instead of publishing
+    convincing-but-wrong driven-wheel evidence."""
+    from app.tuning_export import build_markdown
+    from tests.test_setups import META
+    sd = _synthetic_session(seconds=30.0)
+    n = sd.n
+    sd.columns["DrivetrainType"] = np.zeros(n)  # analyser resolves FWD
+    sd.columns["CarOrdinal"] = np.full(n, 455.0)
+    meta = dict(META, drivetrain=1)  # metadata claims RWD
+    md = build_markdown(sd, meta, "2.2.3")
+    assert "ERROR: drivetrain mismatch" in md
+    assert "suppressed" in md
+
+
 def test_brake_lock_requires_wheel_stoppage_not_just_slip():
     """Forza's normalized slip crosses -0.5 in ordinary hard braking with
     zero lockup (verified on a real capture). Lock detection must key on

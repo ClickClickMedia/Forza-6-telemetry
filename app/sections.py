@@ -107,7 +107,8 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             ("FrontLeft", "FrontRight", "RearLeft", "RearRight")]
     susp_max_all = np.maximum.reduce(susp)
 
-    dtt = int(sd.col("DrivetrainType")[n // 2]) if "DrivetrainType" in sd else 1
+    from .laps import canonical_drivetrain
+    dtt = canonical_drivetrain(sd)
     driven = {0: (0, 1), 1: (2, 3), 2: (0, 1, 2, 3)}.get(dtt, (2, 3))
     slip_ratio = [sd.col(f"TireSlipRatio{w}") for w in
                   ("FrontLeft", "FrontRight", "RearLeft", "RearRight")]

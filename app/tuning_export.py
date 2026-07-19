@@ -568,6 +568,19 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         add("- Balance by corner phase (understeer index per phase; positive "
             "= front sliding more): " + " · ".join(phase_bits))
     trac = session.get("traction", {})
+    meta_dt = DRIVETRAIN.get(meta.get("drivetrain"))
+    trac_dt = trac.get("drivetrain")
+    if meta_dt and trac_dt and trac_dt != "?" and meta_dt != trac_dt:
+        # Never publish convincing-but-wrong traction evidence: if the car
+        # metadata and the analyser disagree on the drivetrain, every
+        # driven-wheel figure below would be watching the wrong axle.
+        add(f"- **ERROR: drivetrain mismatch — car metadata says "
+            f"{meta_dt}, traction analyser resolved {trac_dt}. All "
+            f"driven-wheel traction findings for this session are "
+            f"suppressed; treat section wheelspin values as the only "
+            f"traction evidence and report this session's raw CSV as a "
+            f"bug.**")
+        trac = {}
     add(f"- Traction validation *(estimated)*: drivetrain "
         f"**{trac.get('drivetrain', '?')}**, driven wheels watched: "
         f"{', '.join(trac.get('driven_wheels', []))} · peak driven-wheel "

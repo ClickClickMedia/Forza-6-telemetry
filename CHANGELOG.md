@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.3] - 2026-07-19
+
+### Fixed — CRITICAL data-integrity bug
+- **The traction analyser could watch the wrong axle.** Drivetrain was
+  sampled from a single frame, and loading/menu/results frames zero
+  every identity field — DrivetrainType 0 means FWD, so an RWD race
+  whose recording began on a loading frame reported "driven wheels FL,
+  FR · 0.2 s wheelspin" while the rears spun for seconds per hairpin
+  (caught by a community analyst as a Car-section/traction-section
+  contradiction). Drivetrain is now the **modal value over
+  identity-valid frames**, shared by the traction analyser and the
+  section engine — on the affected capture the report corrects from
+  0.2 s to 50.8 s of rear wheelspin.
+- **Defence in depth**: if car metadata and the analyser ever disagree
+  again, the report prints a loud drivetrain-mismatch error and
+  suppresses every driven-wheel traction finding instead of publishing
+  convincing-but-wrong evidence.
+
 ## [2.2.2] - 2026-07-19
 
 ### Added — analysis-context round (feedback on the setup export)

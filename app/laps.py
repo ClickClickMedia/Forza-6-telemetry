@@ -413,6 +413,26 @@ def detect_position_laps(sd: SessionData,
     return laps
 
 
+def canonical_drivetrain(sd: SessionData) -> int:
+    """THE drivetrain value for a session: the modal DrivetrainType over
+    identity-valid frames (CarOrdinal != 0).
+
+    Never sample a single frame for this — loading/menu/results frames
+    zero every identity field, and DrivetrainType 0 means FWD, so one bad
+    frame silently pointed the traction analyser at the wrong axle of an
+    RWD car (real capture: 240 zeroed frames bracketing 13k honest ones).
+    """
+    if "DrivetrainType" not in sd or sd.n == 0:
+        return -1
+    dtt = sd.col("DrivetrainType")
+    if "CarOrdinal" in sd:
+        valid = dtt[sd.col("CarOrdinal") != 0]
+        if valid.size:
+            dtt = valid
+    vals, counts = np.unique(dtt.astype(int), return_counts=True)
+    return int(vals[np.argmax(counts)])
+
+
 def _pct(mask: np.ndarray, dt: np.ndarray) -> float:
     total = float(np.sum(dt))
     if total <= 0:
@@ -497,7 +517,7 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
 
     # Driven wheels follow the drivetrain — watching the wrong axle scored
     # a FWD car "0 wheelspin" while its fronts spun for 30 s (real capture).
-    dt_type = int(sd.col("DrivetrainType")[i0]) if i1 > i0 else -1
+    dt_type = canonical_drivetrain(sd)
     driven_idx = {0: [0, 1], 1: [2, 3], 2: [0, 1, 2, 3]}.get(dt_type, [0, 1, 2, 3])
     driven_slip = np.maximum.reduce([slip_ratio[i] for i in driven_idx])
 
