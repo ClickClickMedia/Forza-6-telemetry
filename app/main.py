@@ -648,17 +648,27 @@ async def session_tuning_md(session_id: int, download: int = 0,
     row = _session_or_404(session_id)
     row["car_name"] = _resolve_car_name(row.get("car_ordinal"))
     setup = None
+    prev_setup = None
     if setup_id is not None:
         srow = st.db.get_setup(setup_id)
         if srow is None:
             raise HTTPException(status_code=404, detail="setup not found")
         setup = {"label": srow["label"],
                  "data": _json.loads(srow["data"] or "{}")}
+        # The immediately-preceding revision for this car: its diff tells
+        # the analyst exactly which variables this session is testing.
+        older = [s for s in st.db.list_setups(srow["car_ordinal"])
+                 if s["id"] < setup_id]
+        if older:
+            prev = older[0]  # list is newest-first
+            prev_setup = {"label": prev["label"],
+                          "data": _json.loads(prev["data"] or "{}")}
     sd = _load_or_404(row)
     md = build_markdown(sd, row, __version__, setup=setup,
                         lineage=_lineage_for(row),
-                        include_fill_in=(mode != "data"),
-                        verbose=(style != "compact"))
+                        variant=mode if mode in ("data", "quick") else "full",
+                        verbose=(style != "compact"),
+                        prev_setup=prev_setup)
     headers = {}
     if download:
         headers["Content-Disposition"] = (

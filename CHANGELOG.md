@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.5] - 2026-07-19
+
+### Changed — two intents, two workflows (community product feedback)
+Field use settled into two distinct modes: ~80% engineering sessions
+(iterating small setup changes) and ~20% "why was I slow?" exploration.
+One copy action was serving both badly.
+
+- **⚡ Quick analysis** (new primary button): copies immediately — full
+  evidence packet plus a prompt that says setup was not supplied, so the
+  AI locates the problem and names setup *areas* to investigate with its
+  confidence, never inventing values.
+- **Engineering analysis** (the existing sheet flow, renamed): the
+  report now leads the setup section with **"Changes since previous
+  setup"** — a field-level diff against the prior revision, telling the
+  AI exactly which variables this session is testing instead of making
+  it rediscover them from two full tables.
+- The setup sheet shows **tune status** on open: current tune name, how
+  long ago it was saved, and "✓ same as previous" or "● N changes vs
+  previous" — confidence that the tool already knows the car.
+- "Copy data only" remains for pasting evidence into an ongoing
+  conversation without re-sending the prompt.
+
 ## [2.2.4] - 2026-07-19
 
 ### Fixed — section edge cases (field report on a low-power baseline run)

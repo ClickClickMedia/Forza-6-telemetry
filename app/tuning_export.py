@@ -179,10 +179,42 @@ def _setup_relationships(add, data: Dict[str, Any]) -> None:
             "factual, not judgements)*: " + " · ".join(lines))
 
 
-def _setup_section(add, setup: Dict[str, Any]) -> None:
+_CONTEXT_FIELDS = [("drivetrain", "Drivetrain"), ("gearbox", "Gearbox"),
+                   ("discipline", "Discipline"), ("abs_assist", "ABS"),
+                   ("tcs_assist", "Traction control")]
+
+
+def _setup_changes(add, data: Dict[str, Any],
+                   prev_setup: Dict[str, Any]) -> None:
+    """The variables being tested: field-level diff against the previous
+    setup revision — far more useful to an analyst than rediscovering the
+    differences from two full tables."""
+    prev = (prev_setup or {}).get("data") or {}
+    changes = []
+    for key, label in SETUP_FIELDS + _CONTEXT_FIELDS:
+        old = str(prev.get(key) or "").strip()
+        new = str(data.get(key) or "").strip()
+        if old != new:
+            changes.append((label, old or "—", new or "—"))
+    if changes:
+        add(f"**Changes since previous setup** "
+            f"({prev_setup.get('label', '?')}) — the variables being "
+            f"tested:")
+        for label, old, new in changes:
+            add(f"- {label}: {old} → {new}")
+    else:
+        add(f"**Setup unchanged since the previous revision** "
+            f"({prev_setup.get('label', '?')}).")
+    add("")
+
+
+def _setup_section(add, setup: Dict[str, Any],
+                   prev_setup: Dict[str, Any] = None) -> None:
     data = setup.get("data") or {}
     add(f"## My setup — {setup.get('label', 'current')} *(user-entered)*")
     add("")
+    if prev_setup:
+        _setup_changes(add, data, prev_setup)
     if data.get("car_text"):
         add(f"- Car & build: **{data['car_text']}**")
     if data.get("drivetrain"):
@@ -379,16 +411,23 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                    setup: Dict[str, Any] = None,
                    include_fill_in: bool = True,
                    lineage: List[Dict[str, Any]] = None,
-                   verbose: bool = True) -> str:
-    """Render the full tuning report for one session.
+                   verbose: bool = True,
+                   variant: str = None,
+                   prev_setup: Dict[str, Any] = None) -> str:
+    """Render the tuning report for one session.
 
-    ``setup`` embeds saved tuning-screen values (replacing the blank
-    fill-in block); ``include_fill_in=False`` produces the data-only
-    variant ("copy data only"): telemetry, derived values and lineage, but
-    no handling headline, no fill-in template and no AI prompt.
-    ``lineage`` lists earlier same-car sessions with their stored
-    summaries for the before/after table.
+    Three variants serve two user intents plus a machine path:
+    - "full" (engineering): telemetry + setup + changes vs the previous
+      setup revision + AI prompt. ``setup`` embeds the saved values;
+      ``prev_setup`` (the prior revision) drives the changes block.
+    - "quick" (race analyst): telemetry evidence + AI prompt, explicitly
+      no setup — the AI is told to locate the problem and name setup
+      AREAS to investigate, never invent values.
+    - "data": evidence only, no prompt (pasting into an ongoing thread).
+    ``lineage`` lists earlier same-car sessions with stored summaries.
     """
+    if variant is None:
+        variant = "full" if include_fill_in else "data"
     rep = lap_report(sd)
     session = rep["session"] or {}
     verdicts = rep["verdicts"] or {}
@@ -429,7 +468,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "detailed export.*")
     add("")
 
-    data_only = not include_fill_in and setup is None
+    data_only = variant == "data" and setup is None
+    quick = variant == "quick"
 
     add("## Car")
     add("")
@@ -785,8 +825,17 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         _lineage_section(add, lineage, current=compact_summary(rep) or {})
 
     if setup is not None:
-        _setup_section(add, setup)
-    elif include_fill_in:
+        _setup_section(add, setup, prev_setup=prev_setup)
+    elif quick:
+        add("## Setup values")
+        add("")
+        add("**Setup not supplied** — this is a quick analysis. Identify "
+            "where the problems are; limit recommendations to driving "
+            "style, likely setup *areas* to investigate, and hypotheses "
+            "with your stated confidence. Never invent specific setting "
+            "values.")
+        add("")
+    elif variant == "full":
         add("## My current setup (fill in before asking the AI)")
         add("")
         add("```")

@@ -44,8 +44,9 @@
         </div>
         <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
         <div class="exportbar">
-          <button id="btnCopySetup" class="btn primary">Copy for AI + my setup</button>
-          <button id="btnCopyData" class="btn">Copy data only</button>
+          <button id="btnQuick" class="btn primary">⚡ Quick analysis</button>
+          <button id="btnCopySetup" class="btn">Engineering analysis</button>
+          <button id="btnCopyData" class="btn ghost">Data only</button>
           <a id="lnkMd" class="btn ghost" href="#">.md</a>
           <a id="lnkLapsCsv" class="btn ghost" href="#">Laps .csv</a>
           <a id="lnkRawCsv" class="btn ghost" href="#">Raw .csv</a>
@@ -169,6 +170,7 @@
       <button id="sheetClose" class="btn small ghost">✕ Close</button>
     </header>
     <div class="sheet-body">
+      <p id="tuneStatus" class="small muted hidden" style="margin:0 0 10px;"></p>
       <div id="savedRow" class="hidden" style="margin-bottom:12px;">
         <label class="field"><span>Use a saved setup</span>
           <select id="savedSel"></select></label>
@@ -723,6 +725,15 @@
     document.getElementById("sheetClose").addEventListener("click", closeSheet);
     backdrop.addEventListener("click", closeSheet);
 
+    function relTime(iso) {
+      const s = (Date.now() - new Date(iso).getTime()) / 1000;
+      if (!isFinite(s) || s < 0) return "just now";
+      if (s < 90) return "just now";
+      if (s < 3600) return Math.round(s / 60) + " min ago";
+      if (s < 172800) return Math.round(s / 3600) + " h ago";
+      return Math.round(s / 86400) + " days ago";
+    }
+
     async function openSheet() {
       const ordinal = curMeta.car_ordinal;
       savedSetups = [];
@@ -732,7 +743,27 @@
       }
       const row = document.getElementById("savedRow");
       row.classList.toggle("hidden", savedSetups.length === 0);
+      const status = document.getElementById("tuneStatus");
+      status.classList.toggle("hidden", savedSetups.length === 0);
       if (savedSetups.length) {
+        // "The tool already knows the car": current tune, its age, and
+        // how many fields moved since the previous revision.
+        const cur = savedSetups[0];
+        let txt = "Current tune: " + cur.label + " · saved " +
+          relTime(cur.created_at);
+        if (savedSetups.length > 1) {
+          const prev = savedSetups[1].data || {};
+          const d = cur.data || {};
+          const keys = new Set(Object.keys(d).concat(Object.keys(prev)));
+          let n = 0;
+          keys.forEach((k) => {
+            if (String(d[k] || "") !== String(prev[k] || "")) n++;
+          });
+          txt += n === 0 ? " · ✓ same as previous"
+                         : " · ● " + n + " change" + (n === 1 ? "" : "s") +
+                           " vs previous";
+        }
+        status.textContent = txt;
         document.getElementById("savedSel").innerHTML = savedSetups.map((s, i) =>
           '<option value="' + i + '">' + esc(s.label) + " · " +
           esc((s.created_at || "").slice(0, 10)) + "</option>").join("");
@@ -772,6 +803,11 @@
       btn.disabled = false;
     });
 
+    // Two intents, two paths: quick analysis copies immediately (no setup
+    // needed — the AI locates problems from telemetry alone); engineering
+    // analysis opens the setup sheet because accuracy matters there.
+    document.getElementById("btnQuick").addEventListener("click", (e) =>
+      copyReport("?mode=quick", e.currentTarget));
     document.getElementById("btnCopySetup").addEventListener("click", openSheet);
     document.getElementById("btnCopyData").addEventListener("click", (e) =>
       copyReport("?mode=data", e.currentTarget));

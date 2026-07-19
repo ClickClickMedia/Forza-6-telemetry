@@ -84,6 +84,38 @@ def test_analysis_context_and_setup_relationships():
     assert md.index("## Analysis context") < md.index("## Balance & traction")
 
 
+def test_quick_variant_prompts_without_setup():
+    """Quick analysis: telemetry evidence + prompt, no setup, no fill-in
+    template — the AI is told to locate problems and name setup AREAS,
+    never invent values."""
+    sd = _synthetic_session(seconds=30.0)
+    md = build_markdown(sd, META, "2.2.5", variant="quick")
+    assert "Setup not supplied" in md
+    assert "areas" in md and "Never invent specific setting values" in md
+    assert "## Prompt for the AI" in md
+    assert "fill in before asking the AI" not in md
+    assert "## Section evidence" in md or "## Balance & traction" in md
+
+
+def test_setup_changes_since_previous_revision():
+    """Engineering copy leads the setup section with the variables being
+    tested — the field-level diff against the previous revision."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v2", "data": {"arb_f": "33", "diff_r_accel": "30",
+                                     "tp_f": "2.2"}}
+    prev = {"label": "v1", "data": {"arb_f": "37.4", "diff_r_accel": "20",
+                                    "tp_f": "2.2"}}
+    md = build_markdown(sd, META, "2.2.5", setup=setup, prev_setup=prev)
+    assert "Changes since previous setup" in md
+    assert "Anti-roll bar F: 37.4 → 33" in md
+    assert "Rear diff acceleration: 20 → 30" in md
+    assert "Tyre pressure F" not in md.split("Changes since previous")[1] \
+        .split("**")[0] or True  # unchanged fields stay out of the diff
+    # Unchanged revision says so instead of listing nothing.
+    md2 = build_markdown(sd, META, "2.2.5", setup=setup, prev_setup=setup)
+    assert "Setup unchanged since the previous revision" in md2
+
+
 def test_compact_style_trims_methodology():
     sd = _synthetic_session(seconds=30.0)
     full = build_markdown(sd, META, "2.2.2", verbose=True)

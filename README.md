@@ -90,12 +90,19 @@ it.
    live, ends with the event) or *Any driving*. **Free-roam time attacks
    are fully supported** — the app recognises the staged start-line
    signature and times your runs.
-2. Open **Sessions → Export** (or the Analysis page) and hit **"Copy
-   tuning report for AI"** — it confirms with *"Copied! Paste into Claude
-   or ChatGPT for analysis"*. The report contains your laps/runs, tyre
-   temps, balance verdict, traction events, suspension usage and gearing —
-   with explicit labels for what's telemetry, what's estimated, and what
-   needs your input — plus a fill-in block for your setup values.
+2. On the Analysis page, pick your intent:
+   - **⚡ Quick analysis** — one tap, no setup needed. Copies the full
+     evidence packet (laps, section evidence, balance, tyres, traction,
+     suspension, gearing) with a prompt that asks the AI to locate the
+     problem and name setup *areas* to investigate. Perfect for "why was
+     I slow?" after a random race.
+   - **Engineering analysis** — opens your saved tune (stored per car,
+     last version pre-loaded), lets you update the one or two values you
+     just changed in-game, and copies the report with your setup, the
+     **changes since the previous revision** ("the variables being
+     tested"), discipline and assists.
+   Both confirm with *"Copied! Paste into Claude or ChatGPT for
+   analysis"*.
 3. **The AI proposes changes** within Forza's tuning screen: pressures,
    gearing, alignment, anti-roll bars, springs, damping, aero, diff, brakes.
 4. Apply the tune, drive again, and **Compare** the two sessions.
