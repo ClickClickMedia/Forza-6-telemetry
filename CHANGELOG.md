@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.4] - 2026-07-19
+
+### Fixed — section edge cases (field report on a low-power baseline run)
+- **Throttle semantics are now self-consistent**: `never_lifted` only
+  when throttle stayed ≥50% for the whole section; otherwise the time
+  from the deepest lift to reapplication (the old `already_on` could
+  contradict a 0% minimum).
+- **Impact contamination filtered**: per-section lateral G is now the
+  95th percentile (single-frame spikes excluded) and any section with
+  p95 above 3 g is dropped — a 5.11 g "transfer" containing a collision
+  no longer reaches the evidence table. Transfers additionally must
+  never drop below 40 km/h.
+- **Launches split from flying straights**: a straight beginning below
+  30 km/h is classified as a launch — standing-start acceleration no
+  longer pollutes flying-straight gearing evidence.
+- **Single-instance categories print once** ("Only one qualifying
+  instance detected") instead of identical lowest/median/highest rows.
+
 ## [2.2.3] - 2026-07-19
 
 ### Fixed — CRITICAL data-integrity bug

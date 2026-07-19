@@ -42,20 +42,71 @@ def _crafted_session():
     return sd
 
 
+def _sample(bucket):
+    return bucket.get("only") or bucket.get("highest")
+
+
 def test_sections_classify_crafted_shapes():
     sec = detect_sections(_crafted_session())
     assert sec is not None
     assert sec["hairpin"]["count"] >= 1
-    hp = sec["hairpin"]["highest"]
+    hp = _sample(sec["hairpin"])
     assert hp["min_kmh"] < 60 and hp["heading_deg"] >= 100
     assert sec["transfer"]["count"] >= 1
-    tr = sec["transfer"]["highest"]
+    tr = _sample(sec["transfer"])
     assert tr["reversal_s"] < 3.0
     assert sec["straight"]["count"] >= 1
-    st = sec["straight"]["highest"]
+    st = _sample(sec["straight"])
     assert st["length_m"] >= 200
     # Representative samples carry timestamps the AI can find in the CSV.
     assert ":" in hp["start"]
+    # Throttle semantics are self-consistent: full throttle everywhere in
+    # the crafted session → never_lifted, never a bogus "already_on".
+    assert hp["throttle_reapply_s"] == "never_lifted"
+    assert hp["throttle_min_pct"] >= 50
+
+
+def test_throttle_reapply_reports_time_after_a_lift():
+    sd = _crafted_session()
+    t = np.arange(sd.n) / 30.0
+    # Lift to zero through the hairpin, back on 1 s after the deepest point.
+    hp = (t >= 20) & (t < 23)
+    sd.columns["Accel"][hp] = 0.0
+    sec = detect_sections(sd)
+    inst = _sample(sec["hairpin"])
+    assert inst["throttle_min_pct"] == 0
+    assert isinstance(inst["throttle_reapply_s"], float)
+    assert inst["throttle_reapply_s"] > 0
+
+
+def test_impact_contaminated_transfer_is_dropped():
+    """A 5 g lateral spike (collision/landing) inside a flick must not
+    reach the evidence table as a 'performance transfer'."""
+    sd = _crafted_session()
+    t = np.arange(sd.n) / 30.0
+    spike = (t >= 40.0) & (t < 42.2)
+    sd.columns["AccelerationX"][spike] = np.sign(
+        sd.columns["AccelerationX"][spike] + 1e-9) * 5.0 * 9.81
+    sec = detect_sections(sd)
+    assert sec["transfer"]["count"] == 0
+
+
+def test_launch_separated_from_flying_straights():
+    sd = _crafted_session()
+    n = sd.n
+    t = np.arange(n) / 30.0
+    # Standing start: first 12 s accelerate 0 -> 50 m/s.
+    ramp = t < 12.0
+    sd.columns["Speed"][ramp] = np.linspace(0, 50, int(ramp.sum()))
+    sec = detect_sections(sd)
+    assert sec["launch"]["count"] >= 1
+    la = _sample(sec["launch"])
+    assert la["start"] == "00:00.00"
+    # The remaining straights all have flying starts.
+    for key in ("only", "lowest", "median", "highest"):
+        inst = sec["straight"].get(key)
+        if inst:
+            assert float(inst["speed_kmh"].split("→")[0]) >= 30
 
 
 def test_sections_none_for_tiny_session():

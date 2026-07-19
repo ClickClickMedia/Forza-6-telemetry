@@ -248,7 +248,8 @@ def _section_evidence(add, sections: Dict[str, Any],
                       verbose: bool = True) -> None:
     """Per-category driving evidence with representative samples — what
     happened, where and how often; interpretation stays with the analyst."""
-    cats = [c for c in ("hairpin", "turn", "sweeper", "transfer", "straight")
+    cats = [c for c in ("hairpin", "turn", "sweeper", "transfer",
+                        "straight", "launch")
             if sections.get(c, {}).get("count")]
     if not cats:
         return
@@ -278,13 +279,17 @@ def _section_evidence(add, sections: Dict[str, Any],
             add("- Medians: " + " · ".join(
                 f"{k} {v:g}" for k, v in med.items()
                 if k not in ("t_start",)))
-        add(f"- Samples ordered by **{b.get('ranked_by', '?')}** — "
-            f"lowest/median/highest are factual positions on that metric, "
-            f"not quality judgements:")
-        for label in ("lowest", "median", "highest"):
-            inst = b.get(label)
-            if inst:
-                add(f"  - {label}: {_fmt_sample(inst)}")
+        if b.get("only"):
+            add(f"- Only one qualifying instance detected: "
+                f"{_fmt_sample(b['only'])}")
+        else:
+            add(f"- Samples ordered by **{b.get('ranked_by', '?')}** — "
+                f"lowest/median/highest are factual positions on that "
+                f"metric, not quality judgements:")
+            for label in ("lowest", "median", "highest"):
+                inst = b.get(label)
+                if inst:
+                    add(f"  - {label}: {_fmt_sample(inst)}")
         add("")
 
 

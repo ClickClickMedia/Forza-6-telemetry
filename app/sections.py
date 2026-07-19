@@ -28,7 +28,10 @@ SMOOTH_S = 0.25              # lateral-g smoothing window
 TRANSFER_LINK_S = 1.2        # opposite corners linked within this = transfer
 TRANSFER_MAX_REVERSAL_S = 3.0  # peak-to-peak flick time; slower = two corners
 TRANSFER_MIN_AVG_KMH = 60.0  # slower "flicks" are staging/recovery noise
+TRANSFER_MIN_KMH = 40.0      # slowest moment allowed inside a transfer
+SECTION_MAX_LAT_G = 3.0      # p95 above this = impact/landing contamination
 SLIP_CLIP = 2.5              # combined slip beyond this is impact noise
+LAUNCH_MAX_START_KMH = 30.0  # a "straight" starting below this is a launch
 HAIRPIN_MAX_MIN_KMH = 60.0   # a hairpin bottoms out below this
 HAIRPIN_MIN_HEADING_DEG = 100.0
 SWITCHBACK_MIN_HEADING_DEG = 150.0  # ≥ this counts as hairpin up to 90 km/h
@@ -50,6 +53,7 @@ RANK_METRIC = {
     "sweeper": ("slip_delta", "mean front-minus-rear combined slip"),
     "transfer": ("susp_travel_max", "peak suspension travel across the flick"),
     "straight": ("wheelspin_s", "driven-wheel wheelspin"),
+    "launch": ("wheelspin_s", "driven-wheel wheelspin"),
 }
 
 
@@ -136,14 +140,15 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         sl = slice(s, e)
         min_i = s + int(np.argmin(speed[sl]))
         heading = abs(float(np.degrees(yaw[e - 1] - yaw[s])))
-        # Throttle semantics: state at entry, deepest lift, and when ≥50%
-        # throttle returned after the slowest point — "already_on" when
-        # the driver never came off it by then.
-        if accel[min_i] >= 0.5:
-            reapply = "already_on"
+        # Throttle semantics (self-consistent): "never_lifted" ONLY when
+        # throttle stayed ≥50% for the whole section; otherwise the time
+        # from the deepest lift to the first ≥50% reapplication.
+        if float(np.min(accel[sl])) >= 0.5:
+            reapply = "never_lifted"
         else:
-            after = np.where(accel[min_i:e] >= 0.5)[0]
-            reapply = (round(float(t[min_i + after[0]] - t[min_i]), 2)
+            lift_i = s + int(np.argmin(accel[sl]))
+            after = np.where(accel[lift_i:e] >= 0.5)[0]
+            reapply = (round(float(t[lift_i + after[0]] - t[lift_i]), 2)
                        if after.size else "not_reached")
         return {
             "t_start": round(float(t[s] - t0), 2),
@@ -154,7 +159,7 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             "entry_kmh": round(float(kmh[s]), 0),
             "min_kmh": round(float(kmh[min_i]), 0),
             "exit_kmh": round(float(kmh[e - 1]), 0),
-            "lat_g_peak": round(float(np.max(np.abs(lat[sl]))), 2),
+            "lat_g_p95": round(float(np.percentile(np.abs(lat[sl]), 95)), 2),
             "slip_f": round(float(np.mean(slip_f[sl])), 2),
             "slip_r": round(float(np.mean(slip_r[sl])), 2),
             "slip_delta": round(float(np.mean(slip_f[sl] - slip_r[sl])), 2),
@@ -184,6 +189,10 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
                 continue  # two linked corners, not a flick — classify each
             if float(np.mean(kmh[sl])) < TRANSFER_MIN_AVG_KMH:
                 continue  # staging/recovery/spin noise, not a chassis flick
+            if float(np.min(kmh[sl])) < TRANSFER_MIN_KMH:
+                continue  # near-stop inside the pair — spin/recovery
+            if float(np.percentile(np.abs(lat[sl]), 95)) > SECTION_MAX_LAT_G:
+                continue  # impact/landing contamination
             transfers.append({
                 "t_start": round(float(t[s] - t0), 2),
                 "start": _fmt_t(float(t[s] - t0)),
@@ -194,7 +203,7 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
                 "slip_delta_second": b["slip_delta"],
                 "susp_travel_max": round(float(np.max(susp_max_all[sl])), 2),
                 "throttle_min": round(float(np.min(accel[sl])), 2),
-                "lat_g_peak": round(float(np.max(np.abs(lat[sl]))), 2),
+                "lat_g_p95": round(float(np.percentile(np.abs(lat[sl]), 95)), 2),
             })
             in_transfer.update((k, k + 1))
 
@@ -204,6 +213,8 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             continue
         if ev["heading_deg"] < TURN_MIN_HEADING_DEG:
             continue  # a kink, not a corner
+        if ev["lat_g_p95"] > SECTION_MAX_LAT_G:
+            continue  # impact/landing contamination, not cornering
         avg_kmh = (ev["entry_kmh"] + ev["exit_kmh"] + ev["min_kmh"]) / 3.0
         if ((ev["min_kmh"] < HAIRPIN_MAX_MIN_KMH
                 and ev["heading_deg"] >= HAIRPIN_MIN_HEADING_DEG)
@@ -219,7 +230,10 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
 
     # Straights: gaps between CLASSIFIED corners. Kinks (< the turn
     # threshold) live inside straights — a flat-out curve is a straight.
+    # A "straight" that begins near-stationary is a LAUNCH: standing-start
+    # acceleration is not comparable with a flying straight's gearing.
     straights: List[Dict[str, Any]] = []
+    launches: List[Dict[str, Any]] = []
     classified = sorted(
         [(ev["_s"], ev["_e"]) for ev in hairpins + sweepers + turns]
         + [(evs[k]["_s"], evs[k]["_e"]) for k in in_transfer])
@@ -234,7 +248,8 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             continue
         sl = slice(s, e)
         g_used = sorted({int(g) for g in gear[sl] if 0 < g < 11})
-        straights.append({
+        (launches if float(kmh[s]) < LAUNCH_MAX_START_KMH
+         else straights).append({
             "t_start": round(float(t[s] - t0), 2),
             "start": _fmt_t(float(t[s] - t0)),
             "length_m": round(length, 0),
@@ -254,6 +269,9 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
                  for i in instances]
         out: Dict[str, Any] = {"count": len(clean), "ranked_by": key_doc}
         if not clean:
+            return out
+        if len(clean) == 1:
+            out["only"] = clean[0]
             return out
         vals = [(i.get(key) if isinstance(i.get(key), (int, float)) else 0.0, i)
                 for i in clean]
@@ -278,6 +296,7 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         "sweeper": _bucket(sweepers, "sweeper"),
         "transfer": _bucket(transfers, "transfer"),
         "straight": _bucket(straights, "straight"),
+        "launch": _bucket(launches, "launch"),
         "classification": "mutually exclusive — a transfer's two component "
                           "corners are counted only under transfer; an "
                           "event spans contiguous same-direction cornering "
@@ -293,7 +312,16 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             "transfer": f"opposite-direction corners linked within "
                         f"{TRANSFER_LINK_S}s, reversal < "
                         f"{TRANSFER_MAX_REVERSAL_S}s, avg ≥ "
-                        f"{TRANSFER_MIN_AVG_KMH:.0f} km/h",
-            "straight": f"non-cornering ≥ {STRAIGHT_MIN_M:.0f} m",
+                        f"{TRANSFER_MIN_AVG_KMH:.0f} km/h, never below "
+                        f"{TRANSFER_MIN_KMH:.0f} km/h",
+            "straight": f"non-cornering ≥ {STRAIGHT_MIN_M:.0f} m, flying "
+                        f"start (≥ {LAUNCH_MAX_START_KMH:.0f} km/h)",
+            "launch": f"non-cornering ≥ {STRAIGHT_MIN_M:.0f} m from a "
+                      f"standing/near-standing start",
+            "lat_g_p95": f"per-section lateral G is the 95th percentile "
+                         f"inside the section (single-frame spikes "
+                         f"excluded); sections with p95 > "
+                         f"{SECTION_MAX_LAT_G:.0f} g are dropped as "
+                         f"impact-contaminated",
         },
     }
