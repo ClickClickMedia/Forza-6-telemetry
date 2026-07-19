@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-07-19
+
+### Changed — the report is now an evidence packet, not a diagnosis
+Field experience showed verdict language ("severe understeer", "the tune
+worked", "coach the driving first") steered AI analysis before the data
+was examined — and session-wide averages hid how differently a car behaves
+in a hairpin versus a sweeper versus a chicane. The export now organises
+evidence; the analysis layer draws conclusions.
+
+- **Section evidence**: every cornering event is classified — hairpin,
+  turn, sweeper, transfer (flick/chicane) and straight, with documented
+  thresholds, per-category medians and best/median/worst representative
+  samples (timestamped so the AI can find them in the raw CSV). A new
+  **sections.json** export carries every instance for machine reading.
+- **Verdict-free wording throughout**: the handling block is now "Balance
+  evidence (session-wide)" — facts with stated provenance; lineage keeps
+  factual deltas and drops verdict sentences; no line in the report
+  prescribes a setting change any more.
+- **The AI prompt is half the length** and evidence-first: prioritise lap
+  time and like-for-like comparisons, the driver's described problem,
+  section behaviour and representative samples; the smallest change that
+  tests the strongest hypothesis; "no setup change recommended" stays a
+  valid answer; never invent data.
+- Balance evidence now ships in the data-only export too (it is factual).
+
 ## [2.1.12] - 2026-07-19
 
 ### Added — "race engineer" report round (community feedback)

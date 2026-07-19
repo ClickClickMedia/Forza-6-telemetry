@@ -49,6 +49,7 @@
           <a id="lnkMd" class="btn ghost" href="#">.md</a>
           <a id="lnkLapsCsv" class="btn ghost" href="#">Laps .csv</a>
           <a id="lnkRawCsv" class="btn ghost" href="#">Raw .csv</a>
+          <a id="lnkSections" class="btn ghost" href="#">Sections .json</a>
         </div>
       </div>
 
@@ -506,6 +507,7 @@
       document.getElementById("lnkMd").href = "/api/sessions/" + sessionId + "/tuning.md?download=1";
       document.getElementById("lnkLapsCsv").href = "/api/sessions/" + sessionId + "/laps.csv";
       document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
+      document.getElementById("lnkSections").href = "/api/sessions/" + sessionId + "/sections.json?download=1";
       msg.classList.add("hidden");
       content.classList.add("hidden");
       loading.classList.remove("hidden");

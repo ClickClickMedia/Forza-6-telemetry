@@ -665,6 +665,25 @@ async def session_tuning_md(session_id: int, download: int = 0,
     return PlainTextResponse(md, media_type="text/markdown", headers=headers)
 
 
+@app.get("/api/sessions/{session_id}/sections.json")
+async def session_sections(session_id: int, download: int = 0) -> Response:
+    """Machine-readable section evidence (hairpins/turns/sweepers/
+    transfers/straights with every instance) — the structured companion
+    to the Markdown report's representative samples."""
+    from .sections import detect_sections
+    row = _session_or_404(session_id)
+    sd = _load_or_404(row)
+    sec = detect_sections(sd) or {}
+    sec["session"] = {"id": session_id, "name": row.get("name")}
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="{_safe(row["name"])}-sections.json"'
+        )
+    return Response(json.dumps(sec, indent=1), media_type="application/json",
+                    headers=headers)
+
+
 @app.get("/api/sessions/{session_id}/laps.csv")
 async def session_laps_csv(session_id: int) -> Response:
     from .tuning_export import build_laps_csv

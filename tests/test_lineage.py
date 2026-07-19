@@ -94,15 +94,14 @@ def test_export_renders_lineage_table():
     assert "AWD baseline" in md and "3:06.031 (run)" in md
     assert "+0.289" in md and "35.2 (18.4 multi)" in md
     assert "official 1:35.764 — baseline" in md
-    # The clock-first rule rides with the full report...
-    assert "Judge tune changes by the clock first" in md
-    # ...and the handling summary carries the character-not-success caveat.
-    assert "never as a reason to revert a faster setup" in md
+    # Lineage stays strictly factual — deltas, never verdicts.
+    assert "the tune is working" not in md
+    assert "do not revert" not in md
 
 
-def test_since_last_session_clock_first_verdict():
-    """Faster session with worse balance must read as a SUCCESSFUL tune
-    (clock-first doctrine), computed from stored lineage — no scores."""
+def test_since_last_session_is_factual_deltas_only():
+    """The development read is raw deltas; interpretation belongs to the
+    analysis layer, never the export (evidence-not-diagnosis principle)."""
     sd = _synthetic_session(seconds=30.0)
     from app.laps import lap_report
     rep = lap_report(sd)
@@ -114,23 +113,22 @@ def test_since_last_session_clock_first_verdict():
         "summary": {"best_s": cur_best + 1.2, "timing": "laps",
                     "usi": 0.05, "spin_total_s": 10.0},
     }]
-    md = build_markdown(sd, META, "2.1.12", lineage=lineage)
+    md = build_markdown(sd, META, "2.2.0", lineage=lineage)
     assert "**Since last session**" in md
     assert "-1.200 s" in md
-    assert "trading" in md and "do not revert" in md
+    assert "Verdict:" not in md and "do not revert" not in md
 
 
-def test_declared_conditions_gate_confidence():
+def test_declared_conditions_stated_factually():
     """Weather is NOT broadcast (verified through a rain-to-dry capture) —
-    a 'rain'/'night' session note must reduce stated confidence."""
+    a 'rain'/'night' session note must surface as declared conditions."""
     sd = _synthetic_session(seconds=30.0)
     meta = dict(META, notes="official 1:44.8 — night, light rain")
-    md = build_markdown(sd, meta, "2.1.12")
-    assert "Reduced (wet declared)" in md
-    assert "Wet running declared" in md
+    md = build_markdown(sd, meta, "2.2.0")
+    assert "rain, night (user-declared)" in md
+    assert "Wet/mixed running declared" in md
     assert "no weather or time-of-day" in md
-    # Ranked phases + evidence quality always present with cornering data.
-    assert "Corner-phase ranking" in md
+    assert "Understeer index by corner phase" in md
     assert "Evidence quality: cornering sample" in md
 
 
@@ -141,15 +139,15 @@ def test_lap_consistency_line_with_three_laps():
 
 
 def test_data_only_export_is_actually_data_only():
-    """'Copy data only' must carry numbers and lineage, but no AI prompt,
-    no handling headline and no coaching."""
+    """'Copy data only' must carry the full evidence (balance included —
+    it is factual now) but no AI prompt and no fill-in template."""
     sd = _synthetic_session(seconds=30.0)
     lineage = [{"name": "prev", "created_at": "2026-07-18", "notes": "",
                 "best_lap": 94.6, "summary": {"best_s": 94.6, "usi": 0.331}}]
-    md = build_markdown(sd, META, "2.1.8", setup=None,
+    md = build_markdown(sd, META, "2.2.0", setup=None,
                         include_fill_in=False, lineage=lineage)
     assert "Prompt for the AI" not in md
-    assert "## Handling summary" not in md
-    assert "Judge tune changes by the clock first" not in md
+    assert "fill in before asking the AI" not in md
+    assert "## Balance evidence" in md
     assert "## Tune lineage" in md and "1:34.600" in md
     assert "## Balance & traction" in md

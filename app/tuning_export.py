@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .laps import WHEELS, lap_report
+from .sections import detect_sections
 from .session_data import SessionData
 
 # Display maps (presentation only — raw ints always shown too). Class letters
@@ -24,38 +25,25 @@ CAR_CLASS = {0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "X"}
 DRIVETRAIN = {0: "FWD", 1: "RWD", 2: "AWD"}
 
 AI_PROMPT = """\
-You are an experienced Forza Horizon tuner. Above is telemetry from my
-session, exported by the open-source FH6 telemetry tool, plus my current
-setup values where I've filled them in.
+Analyse the telemetry evidence above together with the driver note, setup
+values and tune lineage. This export is evidence, not a diagnosis — the
+interpretation is yours.
 
-Work through it in this order:
-1. Read the balance verdict, understeer index (positive = understeer,
-   negative = oversteer), and front/rear slide times. Diagnose the car's
-   dominant handling problem, citing the specific numbers.
-2. Check tyre temperatures against the working window shown. Cold = not
-   enough load/camber/pressure too high for that axle; hot = overworked axle
-   (too much roll stiffness there, pressure too low, or driving style).
-   Front-vs-rear delta indicates which end is doing the work.
-3. Check traction events (wheelspin, brake lock) against drivetrain type,
-   and suspension travel / bottom-out counts for spring & ride-height issues.
-4. Check gearing: time on limiter and average shift RPM.
-5. Propose specific setup changes, most impactful first. For each: the
-   setting, direction and rough magnitude, and which telemetry number
-   justifies it. Stay within what Forza's tuning screen exposes (tyre
-   pressure, gearing, camber/toe/caster, anti-roll bars, springs, ride
-   height, damping, aero, diff, brake balance/pressure).
-6. If my setup values are missing for a setting you want to change, say what
-   to look at in-game and give your best directional advice anyway.
-7. Finish with the single highest-priority change and what I should feel
-   from the driver's seat if it works.
+Prioritise:
+1. Lap time and like-for-like comparisons (same route, discipline and
+   conditions).
+2. The driver's described problem area.
+3. Behaviour by section type: hairpin, turn, sweeper, transfer, straight.
+4. The representative section samples, not only session-wide averages.
+5. The smallest tune change that tests the strongest hypothesis.
 
-Ground rules: weight your advice by the evidence-quality and corner-phase
-ranking lines — thin cornering samples, declared wet/night conditions, or a
-large lap-time spread all reduce confidence. **"No setup change recommended"
-is a valid and sometimes correct answer**: prefer it when the clock is
-improving, the evidence is weak, or driver consistency (lap spread, shift
-spread) dominates — coach the driving first in that case. Never invent data
-this export does not contain.
+Do not assume a lower understeer index is automatically faster.
+Do not recommend changes from session-wide averages alone.
+Distinguish circuit, touge, dirt and other disciplines from the evidence.
+Treat wet, night or rewind-affected running separately where declared.
+"No setup change recommended" is a valid answer when evidence is weak,
+the clock is improving, or driver variance dominates.
+Never invent data this export does not contain.
 """
 
 # Condition words scanned in the driver's session note — Forza broadcasts
@@ -99,34 +87,28 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any],
     if verdict in ("insufficient cornering data", ""):
         return
     delta = (temps.get("front", {}).get("avg_c", 0) or 0) - (temps.get("rear", {}).get("avg_c", 0) or 0)
-    severity = "Severe" if abs(usi) > 0.30 else "Moderate" if abs(usi) > 0.15 else "Mild"
     wet, dark = _declared_conditions(notes)
-    # Confidence rises when the thermal story agrees with the slip story,
-    # and falls when the driver declared wet running.
     thermally_consistent = (usi > 0 and delta > 5) or (usi < 0 and delta < -5)
-    confidence = "High" if thermally_consistent and abs(usi) > 0.15 else "Medium"
-    if wet:
-        confidence = "Reduced (wet declared)"
     phases = bal.get("phases") or session.get("balance", {}).get("phases") or {}
     ranked = sorted(
         ((p["usi"], p.get("time_s", 0), pname)
          for pname, p in phases.items() if p.get("usi") is not None),
         key=lambda x: abs(x[0]), reverse=True)
-    add("## Handling summary")
+    add("## Balance evidence (session-wide)")
     add("")
-    add(f"- **Primary issue:** {verdict} · Severity **{severity}** · "
-        f"Confidence **{confidence}**")
-    add(f"- Evidence: understeer index {usi:+.3f} · front axle at "
+    add(f"- Session-wide balance: **{verdict}** — understeer index "
+        f"{usi:+.3f} (positive = front sliding more) · front axle at "
         f"{session.get('balance', {}).get('front_slip_angle_corner_avg', 0):.2f} of grip limit vs rear "
         f"{session.get('balance', {}).get('rear_slip_angle_corner_avg', 0):.2f} · "
-        f"front−rear temp delta {delta:+.1f} °C")
+        f"front−rear temp delta {delta:+.1f} °C "
+        f"(thermal story {'agrees' if thermally_consistent else 'does not clearly agree'} "
+        f"with the slip story)")
     if ranked:
-        add("- Corner-phase ranking (worst first — target the top): "
+        add("- Understeer index by corner phase (largest magnitude first): "
             + " · ".join(f"**{name}** {u:+.3f} ({ts:.0f}s)"
                          for u, ts, name in ranked))
     corner_sample = sum(ts for _, ts, _ in ranked)
-    quality = ("thin — treat balance conclusions as provisional"
-               if corner_sample < 20 else
+    quality = ("thin" if corner_sample < 20 else
                "adequate" if corner_sample < 60 else "rich")
     cond_txt = (", ".join(wet + dark) + " (user-declared)") if (wet or dark) \
         else "not declared — assumed dry (note them on the Analysis page if not)"
@@ -134,16 +116,10 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any],
         f"({quality}) · drift/opposite-lock excluded "
         f"{bal.get('pct_drifting', 0):.0f}% · conditions: {cond_txt}")
     if wet:
-        add(f"- ⚠ Wet running declared ({', '.join(wet)}): tyre-temperature "
-            f"and grip verdicts carry reduced confidence — weight dry-lap "
-            f"evidence higher and prefer conservative setup changes.")
+        add(f"- Wet/mixed running declared ({', '.join(wet)}): temperature "
+            f"and grip figures include wet frames.")
     if bal.get("caveat"):
         add(f"- ⚠ {bal['caveat']}")
-    add("- These verdicts describe the car's **character**, not the tune's "
-        "success — a faster car often carries more corner speed and shows "
-        "*worse* balance numbers. If lap time improved since the last "
-        "session, the tune worked; treat this section as \"what limits the "
-        "car now\", never as a reason to revert a faster setup.")
     add("")
 
 
@@ -184,16 +160,13 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
                 ([f"traction control {tcs.lower()}"] if tcs else [])
         add(f"- Assists: **{', '.join(parts)}**")
     if abs_a == "On":
-        add("  - With ABS on, time at the lock threshold is the assist "
-            "working as intended — judge brake pressure only on sustained "
-            "locks, stopping instability, or overshot corners.")
+        add("  - ABS on: lock-threshold braking time reflects the assist "
+            "modulating, not wheels stopping.")
     elif abs_a == "Off":
-        add("  - ABS is off: lock-threshold time is driver threshold "
-            "braking; sustained locks point at brake pressure/balance.")
+        add("  - ABS off: lock-threshold time is driver threshold braking.")
     if tcs == "On":
-        add("  - With traction control on, recorded wheelspin is what the "
-            "assist could not contain — treat it as a floor, not the full "
-            "traction picture.")
+        add("  - Traction control on: recorded wheelspin is what the assist "
+            "could not contain (a floor, not the full traction picture).")
     filled = [(label, str(data.get(key)).strip())
               for key, label in SETUP_FIELDS
               if str(data.get(key) or "").strip()]
@@ -215,8 +188,58 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
     add("")
 
 
+_SAMPLE_SKIP = {"t_start"}
+
+
+def _fmt_sample(inst: Dict[str, Any]) -> str:
+    bits = []
+    for k, v in inst.items():
+        if k in _SAMPLE_SKIP:
+            continue
+        if isinstance(v, float):
+            v = f"{v:g}"
+        elif isinstance(v, list):
+            v = "/".join(str(x) for x in v)
+        bits.append(f"{k} {v}")
+    return " · ".join(bits)
+
+
+def _section_evidence(add, sections: Dict[str, Any]) -> None:
+    """Per-category driving evidence with representative samples — what
+    happened, where and how often; interpretation stays with the analyst."""
+    cats = [c for c in ("hairpin", "turn", "sweeper", "transfer", "straight")
+            if sections.get(c, {}).get("count")]
+    if not cats:
+        return
+    add("## Section evidence")
+    add("")
+    add("*(Every cornering event in the session, classified by shape — "
+        "session-wide averages hide how differently a car behaves in a "
+        "hairpin versus a fast sweeper versus a flick. `start` is "
+        "session-relative mm:ss. Full instance list: the sections.json "
+        "export.)*")
+    add("")
+    th = sections.get("thresholds", {})
+    for cat in cats:
+        b = sections[cat]
+        add(f"### {cat.capitalize()} × {b['count']}"
+            + (f"  *({th.get(cat)})*" if th.get(cat) else ""))
+        add("")
+        med = b.get("median_metrics") or {}
+        if med:
+            add("- Medians: " + " · ".join(
+                f"{k} {v:g}" for k, v in med.items()
+                if k not in ("t_start",)))
+        add(f"- Samples ranked by {b.get('ranked_by', '?')} "
+            f"(best = smallest):")
+        for label in ("best", "median", "worst"):
+            inst = b.get(label)
+            if inst:
+                add(f"  - {label}: {_fmt_sample(inst)}")
+        add("")
+
+
 def _lineage_section(add, lineage: List[Dict[str, Any]],
-                     include_guidance: bool,
                      current: Dict[str, Any] = None) -> None:
     """Earlier sessions with the same car: the before/after evidence a tune
     iteration is judged against."""
@@ -272,20 +295,6 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
             add(f"**Since last session** ({prev.get('name', '?')}): "
                 + " · ".join(bits)
                 + " *(assumes same route and conditions — confirm)*")
-            if pb and cb and same_kind and include_guidance:
-                if cb < pb and pu is not None and cu is not None \
-                        and abs(cu) > abs(pu):
-                    add("- Verdict: **clock improved while balance metrics "
-                        "worsened — the tune is working.** You are trading "
-                        "balance for speed; diagnose the new limit, do not "
-                        "revert.")
-                elif cb < pb:
-                    add("- Verdict: improved on the clock without giving up "
-                        "balance.")
-                else:
-                    add("- Verdict: slower than the previous session — "
-                        "before blaming the tune, check route, conditions "
-                        "and traffic were like-for-like.")
             add("")
     add(_md_table(
         ["Session", "Date", "Best", "USI", "Wheelspin s", "Lock s",
@@ -296,13 +305,6 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
             "tune versions live here):")
         for line in note_lines:
             add(line)
-        add("")
-    if include_guidance:
-        add("**Judge tune changes by the clock first.** Balance and traction "
-            "metrics describe the car's character, not the tune's success — "
-            "a faster session with a worse understeer index is a successful "
-            "tune whose limiting factor has moved. Diagnose the new limit; "
-            "do not chase the old metric back down.")
         add("")
 
 
@@ -324,6 +326,10 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     verdicts = rep["verdicts"] or {}
     balance = verdicts.get("balance", {})
     temps = verdicts.get("tyre_temps", {})
+    try:
+        sections = detect_sections(sd)
+    except Exception:  # section evidence must never sink the whole report
+        sections = None
 
     cls_raw = meta.get("car_class")
     cls = CAR_CLASS.get(cls_raw, "?") if cls_raw is not None else "?"
@@ -352,11 +358,10 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
 
     data_only = not include_fill_in and setup is None
 
-    # --- Handling summary: the one thing to fix first, with evidence -----
-    # (omitted from the data-only export, which carries numbers, not advice)
-    if not data_only:
-        _handling_summary(add, session, verdicts,
-                          notes=str(meta.get("notes") or ""))
+    # Balance evidence is factual (no verdict language), so every export
+    # variant carries it — data-only included.
+    _handling_summary(add, session, verdicts,
+                      notes=str(meta.get("notes") or ""))
 
     add("## Car")
     add("")
@@ -535,10 +540,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         where = ("mostly while turning" if turning > straight * 1.5 else
                  "mostly on straights" if straight > turning * 1.5 else
                  "split between corners and straights")
-        add(f"- Wheelspin pattern *(estimated)*: **{which}, {where}** — "
-            f"single-wheel+turning points at diff accel lock; all-wheel+"
-            f"straight points at power vs tyre (gear longer, tyre up, or "
-            f"power down), not more lock")
+        add(f"- Wheelspin pattern *(estimated)*: **{which}, {where}**")
         add(f"- Wheelspin split (mutually exclusive; buckets sum to the total): "
             + " · ".join(f"{w} only {s:.1f} s" for w, s in byw.items())
             + f" · multiple driven wheels {multi:.1f} s — "
@@ -546,12 +548,10 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     if (trac.get("drivetrain") == "FWD"
             and trac.get("wheelspin_total_s", 0) > 15
             and (peaks.get("power_kw") or 0) > 250):
-        add(f"- **Build-level signal** *(estimated)*: "
+        add(f"- Build-context observation *(estimated)*: "
             f"{trac.get('wheelspin_total_s', 0):.0f} s of driven-wheel "
             f"wheelspin with {peaks['power_kw']:.0f} kW observed through the "
-            f"front axle — the chassis/tyres may not be able to deploy this "
-            f"output. Worth asking whether tyre compound/width upgrades (or "
-            f"trading power away) fit the goal better than tune changes alone.")
+            f"front axle.")
     add(f"- Sustained brake locks *(detector: {trac.get('brake_lock_method', 'wheel-speed deficit')})*: "
         f"front {trac.get('brake_lock_front_events', 0)} event(s) / "
         f"{trac.get('brake_lock_front_s', 0):.1f} s · rear "
@@ -561,13 +561,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"({trac.get('braking_time_s', 0):.0f} s under brakes; handbrake excluded)")
     add(f"- Braking at the lock threshold (ABS-style slip modulation, wheels "
         f"still turning): {trac.get('near_lock_s', 0):.1f} s = "
-        f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time** — "
-        f"with ABS on this is normal threshold braking, not a fault; only "
-        f"recommend brake-pressure changes on sustained lock or instability")
+        f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time** "
+        f"— with ABS on this is the assist modulating, not wheels stopping")
     inputs = session.get("inputs", {})
     add(f"- Full throttle: {inputs.get('pct_full_throttle', 0):.1f} % of session · "
         f"Braking: {inputs.get('pct_braking', 0):.1f} %")
     add("")
+
+    if sections:
+        _section_evidence(add, sections)
 
     add("## Suspension (normalised travel, 0 = full extension, 1 = bottomed)")
     add("")
@@ -596,9 +598,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"Avg shift RPM: {g.get('shift_rpm_avg') or '–'}")
     if g.get("shift_rpm_spread") is not None:
         add(f"- Shift-point spread (p10–p90 of upshift RPM): "
-            f"**{g['shift_rpm_spread']:.0f} rpm** — a wide spread is a "
-            f"*driver* signal (inconsistent shift points), not a gearing "
-            f"fault; coach before re-gearing")
+            f"**{g['shift_rpm_spread']:.0f} rpm** *(driver-variance signal)*")
     add(f"- Time on limiter (≥97% max RPM): {g.get('pct_on_limiter', 0):.1f} %")
     add("")
 
@@ -646,9 +646,9 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             add(f"- Lap consistency *(driver signal, {len(complete)} complete "
                 f"laps)*: spread {spread:.3f} s = **{pct:.1f}% of the median "
                 f"lap** · full-throttle {min(thr):.0f}–{max(thr):.0f}% · "
-                f"braking {min(brk):.0f}–{max(brk):.0f}%. Above ~2% spread, "
-                f"consistency gains usually outweigh setup changes — coach "
-                f"the driving first.")
+                f"braking {min(brk):.0f}–{max(brk):.0f}% "
+                f"*(for scale: above ~2% spread, lap-to-lap variance "
+                f"typically exceeds the effect of a single setup change)*")
             add("")
 
     if lineage:
@@ -659,8 +659,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "usi": balance.get("understeer_index"),
             "spin_total_s": (session.get("traction") or {}).get("wheelspin_total_s"),
         }
-        _lineage_section(add, lineage, include_guidance=not data_only,
-                         current=cur_summary)
+        _lineage_section(add, lineage, current=cur_summary)
 
     if setup is not None:
         _setup_section(add, setup)

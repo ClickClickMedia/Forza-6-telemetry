@@ -53,7 +53,7 @@ def test_export_renders_declared_assists():
     }}
     md = build_markdown(sd, META, "2.1.7", setup=setup)
     assert "Assists: **ABS on, traction control off**" in md
-    assert "assist working as intended" in md
+    assert "the assist modulating" in md
     # Every report carries both brake numbers, clearly told apart.
     assert "Sustained brake locks" in md
     assert "ABS-style slip modulation" in md
