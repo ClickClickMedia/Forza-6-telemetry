@@ -48,7 +48,29 @@ Work through it in this order:
    to look at in-game and give your best directional advice anyway.
 7. Finish with the single highest-priority change and what I should feel
    from the driver's seat if it works.
+
+Ground rules: weight your advice by the evidence-quality and corner-phase
+ranking lines — thin cornering samples, declared wet/night conditions, or a
+large lap-time spread all reduce confidence. **"No setup change recommended"
+is a valid and sometimes correct answer**: prefer it when the clock is
+improving, the evidence is weak, or driver consistency (lap spread, shift
+spread) dominates — coach the driving first in that case. Never invent data
+this export does not contain.
 """
+
+# Condition words scanned in the driver's session note — Forza broadcasts
+# NO weather or time-of-day (verified at packet level, including the one
+# unmapped byte, through an actual rain-to-dry session), so conditions are
+# user-declared and these keywords gate temperature confidence.
+_WET_WORDS = ("rain", "wet", "storm", "snow", "drying", "damp")
+_DARK_WORDS = ("night", "dusk", "dawn")
+
+
+def _declared_conditions(notes: str):
+    low = (notes or "").lower()
+    wet = [w for w in _WET_WORDS if w in low]
+    dark = [w for w in _DARK_WORDS if w in low]
+    return wet, dark
 
 
 def _fmt_lap_time(seconds: Optional[float]) -> str:
@@ -67,7 +89,8 @@ def _md_table(headers: List[str], rows: List[List[Any]]) -> str:
     return "\n".join(out)
 
 
-def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any]) -> None:
+def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any],
+                      notes: str = "") -> None:
     """Severity/confidence-ranked headline so the AI leads with what matters."""
     bal = (verdicts or {}).get("balance", {})
     temps = (verdicts or {}).get("tyre_temps", {})
@@ -77,16 +100,18 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any]) ->
         return
     delta = (temps.get("front", {}).get("avg_c", 0) or 0) - (temps.get("rear", {}).get("avg_c", 0) or 0)
     severity = "Severe" if abs(usi) > 0.30 else "Moderate" if abs(usi) > 0.15 else "Mild"
-    # Confidence rises when the thermal story agrees with the slip story.
+    wet, dark = _declared_conditions(notes)
+    # Confidence rises when the thermal story agrees with the slip story,
+    # and falls when the driver declared wet running.
     thermally_consistent = (usi > 0 and delta > 5) or (usi < 0 and delta < -5)
     confidence = "High" if thermally_consistent and abs(usi) > 0.15 else "Medium"
+    if wet:
+        confidence = "Reduced (wet declared)"
     phases = bal.get("phases") or session.get("balance", {}).get("phases") or {}
-    worst_phase = None
-    worst_val = 0.0
-    for pname, p in phases.items():
-        if p.get("usi") is not None and abs(p["usi"]) > abs(worst_val):
-            worst_val = p["usi"]
-            worst_phase = pname
+    ranked = sorted(
+        ((p["usi"], p.get("time_s", 0), pname)
+         for pname, p in phases.items() if p.get("usi") is not None),
+        key=lambda x: abs(x[0]), reverse=True)
     add("## Handling summary")
     add("")
     add(f"- **Primary issue:** {verdict} · Severity **{severity}** · "
@@ -95,9 +120,23 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any]) ->
         f"{session.get('balance', {}).get('front_slip_angle_corner_avg', 0):.2f} of grip limit vs rear "
         f"{session.get('balance', {}).get('rear_slip_angle_corner_avg', 0):.2f} · "
         f"front−rear temp delta {delta:+.1f} °C")
-    if worst_phase:
-        add(f"- Worst corner phase: **{worst_phase}** ({worst_val:+.3f}) — "
-            f"target the fix there first")
+    if ranked:
+        add("- Corner-phase ranking (worst first — target the top): "
+            + " · ".join(f"**{name}** {u:+.3f} ({ts:.0f}s)"
+                         for u, ts, name in ranked))
+    corner_sample = sum(ts for _, ts, _ in ranked)
+    quality = ("thin — treat balance conclusions as provisional"
+               if corner_sample < 20 else
+               "adequate" if corner_sample < 60 else "rich")
+    cond_txt = (", ".join(wet + dark) + " (user-declared)") if (wet or dark) \
+        else "not declared — assumed dry (note them on the Analysis page if not)"
+    add(f"- Evidence quality: cornering sample {corner_sample:.0f} s "
+        f"({quality}) · drift/opposite-lock excluded "
+        f"{bal.get('pct_drifting', 0):.0f}% · conditions: {cond_txt}")
+    if wet:
+        add(f"- ⚠ Wet running declared ({', '.join(wet)}): tyre-temperature "
+            f"and grip verdicts carry reduced confidence — weight dry-lap "
+            f"evidence higher and prefer conservative setup changes.")
     if bal.get("caveat"):
         add(f"- ⚠ {bal['caveat']}")
     add("- These verdicts describe the car's **character**, not the tune's "
@@ -177,7 +216,8 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
 
 
 def _lineage_section(add, lineage: List[Dict[str, Any]],
-                     include_guidance: bool) -> None:
+                     include_guidance: bool,
+                     current: Dict[str, Any] = None) -> None:
     """Earlier sessions with the same car: the before/after evidence a tune
     iteration is judged against."""
     rows = []
@@ -211,6 +251,42 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
         "treat a row as a baseline if the route and build match; ask me if "
         "unsure.)*")
     add("")
+    # Development read vs the most recent prior session with stored data —
+    # raw deltas plus the clock-first verdict, never a fabricated score.
+    prev = next((p for p in lineage if p.get("summary")), None)
+    if prev and current:
+        s = prev["summary"]
+        bits = []
+        pb, cb = s.get("best_s"), current.get("best_s")
+        same_kind = s.get("timing") == current.get("timing")
+        if pb and cb and same_kind:
+            bits.append(f"best {_fmt_lap_time(pb)} → {_fmt_lap_time(cb)} "
+                        f"({cb - pb:+.3f} s)")
+        pu, cu = s.get("usi"), current.get("usi")
+        if pu is not None and cu is not None:
+            bits.append(f"USI {pu:+.3f} → {cu:+.3f}")
+        ps, cs = s.get("spin_total_s"), current.get("spin_total_s")
+        if ps is not None and cs is not None:
+            bits.append(f"wheelspin {ps:.1f} → {cs:.1f} s")
+        if bits:
+            add(f"**Since last session** ({prev.get('name', '?')}): "
+                + " · ".join(bits)
+                + " *(assumes same route and conditions — confirm)*")
+            if pb and cb and same_kind and include_guidance:
+                if cb < pb and pu is not None and cu is not None \
+                        and abs(cu) > abs(pu):
+                    add("- Verdict: **clock improved while balance metrics "
+                        "worsened — the tune is working.** You are trading "
+                        "balance for speed; diagnose the new limit, do not "
+                        "revert.")
+                elif cb < pb:
+                    add("- Verdict: improved on the clock without giving up "
+                        "balance.")
+                else:
+                    add("- Verdict: slower than the previous session — "
+                        "before blaming the tune, check route, conditions "
+                        "and traffic were like-for-like.")
+            add("")
     add(_md_table(
         ["Session", "Date", "Best", "USI", "Wheelspin s", "Lock s",
          "F/R °C", "Max km/h", "Shifts"], rows))
@@ -279,7 +355,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     # --- Handling summary: the one thing to fix first, with evidence -----
     # (omitted from the data-only export, which carries numbers, not advice)
     if not data_only:
-        _handling_summary(add, session, verdicts)
+        _handling_summary(add, session, verdicts,
+                          notes=str(meta.get("notes") or ""))
 
     add("## Car")
     add("")
@@ -303,6 +380,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             f"*(estimated from {peaks.get('samples', 0)} valid-pull samples "
             f"covering {peaks.get('coverage_s', 0):.1f} s — throttle ≥95%, "
             f"sustained; NOT the garage's rated build figures)*")
+        if peaks.get("pct_at_peak_power") is not None:
+            add(f"- Time at ≥90% of that observed peak: "
+                f"**{peaks['pct_at_peak_power']:.1f}%** of moving time "
+                f"*(utilisation relative to this session's own peak — low "
+                f"values suggest gearing keeps the engine out of its best "
+                f"range, or the track never lets it stretch)*")
     add("")
 
     add("## Session")
@@ -372,6 +455,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"a generic road-racing heuristic (community optimal 88–99 °C, usable "
         f"77–121 °C); actual targets vary by tyre compound, which telemetry "
         f"does not report")
+    wet_w, dark_w = _declared_conditions(str(meta.get("notes") or ""))
+    if wet_w or dark_w:
+        add(f"- ⚠ Conditions declared in the session note "
+            f"({', '.join(wet_w + dark_w)}): temperatures from wet or night "
+            f"running read low — reduce confidence in cold-tyre verdicts.")
+    add("- Forza broadcasts **no weather or time-of-day** (verified at "
+        "packet level through a rain-to-dry session, including the one "
+        "unmapped byte) — conditions come from the driver's session note "
+        "only.")
     add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
         "**one temperature per tyre** (no inner/middle/outer). Pressure and "
         "camber advice must come from the setup values filled in below plus "
@@ -433,13 +525,24 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"(grouped: ≥100 ms, 300 ms recovery gap)")
     byw = trac.get("wheelspin_by_wheel_s") or {}
     if byw and trac.get("wheelspin_total_s", 0) > 0:
+        single = sum(byw.values())
+        multi = trac.get("wheelspin_multi_s", 0) or 0
+        turning = trac.get("wheelspin_turning_s", 0) or 0
+        straight = trac.get("wheelspin_straight_s", 0) or 0
+        which = ("mostly single-wheel flare" if single > multi * 1.5 else
+                 "mostly all-driven-wheel spin" if multi > single * 1.5 else
+                 "mixed single/all-wheel spin")
+        where = ("mostly while turning" if turning > straight * 1.5 else
+                 "mostly on straights" if straight > turning * 1.5 else
+                 "split between corners and straights")
+        add(f"- Wheelspin pattern *(estimated)*: **{which}, {where}** — "
+            f"single-wheel+turning points at diff accel lock; all-wheel+"
+            f"straight points at power vs tyre (gear longer, tyre up, or "
+            f"power down), not more lock")
         add(f"- Wheelspin split (mutually exclusive; buckets sum to the total): "
             + " · ".join(f"{w} only {s:.1f} s" for w, s in byw.items())
-            + f" · multiple driven wheels {trac.get('wheelspin_multi_s', 0):.1f} s — "
-            f"while turning {trac.get('wheelspin_turning_s', 0):.1f} s / "
-            f"straight {trac.get('wheelspin_straight_s', 0):.1f} s "
-            f"(one-wheel flare → more diff lock; all-wheel spin → less "
-            f"power or more tyre, not more lock)")
+            + f" · multiple driven wheels {multi:.1f} s — "
+            f"while turning {turning:.1f} s / straight {straight:.1f} s")
     if (trac.get("drivetrain") == "FWD"
             and trac.get("wheelspin_total_s", 0) > 15
             and (peaks.get("power_kw") or 0) > 250):
@@ -491,6 +594,11 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add(f"- Top gear used: {g.get('top_gear', '?')} · "
         f"Upshifts: {g.get('shift_count', 0)} · "
         f"Avg shift RPM: {g.get('shift_rpm_avg') or '–'}")
+    if g.get("shift_rpm_spread") is not None:
+        add(f"- Shift-point spread (p10–p90 of upshift RPM): "
+            f"**{g['shift_rpm_spread']:.0f} rpm** — a wide spread is a "
+            f"*driver* signal (inconsistent shift points), not a gearing "
+            f"fault; coach before re-gearing")
     add(f"- Time on limiter (≥97% max RPM): {g.get('pct_on_limiter', 0):.1f} %")
     add("")
 
@@ -525,9 +633,34 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             rows,
         ))
         add("")
+        complete = [l for l in rep["laps"]
+                    if l.get("complete") and l.get("time_s")
+                    and l.get("lap") is not None]
+        if len(complete) >= 3:
+            times = sorted(l["time_s"] for l in complete)
+            spread = times[-1] - times[0]
+            median = times[len(times) // 2]
+            pct = spread / median * 100.0 if median else 0.0
+            thr = [l["inputs"]["pct_full_throttle"] for l in complete]
+            brk = [l["inputs"]["pct_braking"] for l in complete]
+            add(f"- Lap consistency *(driver signal, {len(complete)} complete "
+                f"laps)*: spread {spread:.3f} s = **{pct:.1f}% of the median "
+                f"lap** · full-throttle {min(thr):.0f}–{max(thr):.0f}% · "
+                f"braking {min(brk):.0f}–{max(brk):.0f}%. Above ~2% spread, "
+                f"consistency gains usually outweigh setup changes — coach "
+                f"the driving first.")
+            add("")
 
     if lineage:
-        _lineage_section(add, lineage, include_guidance=not data_only)
+        cur_summary = {
+            "best_s": rep.get("best_lap_s"),
+            "timing": ("laps" if rep.get("has_laps")
+                       else "runs" if rep.get("has_runs") else None),
+            "usi": balance.get("understeer_index"),
+            "spin_total_s": (session.get("traction") or {}).get("wheelspin_total_s"),
+        }
+        _lineage_section(add, lineage, include_guidance=not data_only,
+                         current=cur_summary)
 
     if setup is not None:
         _setup_section(add, setup)

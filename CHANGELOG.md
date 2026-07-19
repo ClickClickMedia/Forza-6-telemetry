@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.12] - 2026-07-19
+
+### Added — "race engineer" report round (community feedback)
+- **Corner-phase ranking**: entry/mid/exit/lift ordered worst-first so
+  fixes target the biggest contributor.
+- **Evidence quality line**: cornering sample size (thin/adequate/rich),
+  drift-excluded share, and declared conditions — the AI is told to weight
+  its advice by it.
+- **Conditions awareness, honestly**: Forza broadcasts no weather or
+  time-of-day (verified at packet level through a rain-to-dry session,
+  including the one unmapped byte — it never moves). Declare conditions in
+  the session note; "rain/night" words reduce stated temperature and grip
+  confidence throughout the report.
+- **Since-last-session deltas** with a clock-first verdict: a faster
+  session with worse balance metrics reads as "the tune is working — do
+  not revert", never as a regression.
+- **Lap consistency line** (3+ complete laps): time spread as % of the
+  median lap plus throttle/brake ranges — above ~2%, the report says
+  consistency beats setup changes.
+- **Wheelspin pattern classification**: mostly-single-wheel vs all-wheel,
+  corners vs straights, with the matching tuning direction.
+- **Shift-point spread** (p10–p90 upshift RPM) flagged as a driver signal,
+  and **time at ≥90% of observed peak power** (relative to the session's
+  own demonstrated peak, never garage figures).
+- AI prompt now states plainly: **"no setup change recommended" is a
+  valid answer** — prefer it when the clock improves, evidence is weak,
+  or driver variance dominates.
+
 ## [2.1.11] - 2026-07-18
 
 ### Fixed

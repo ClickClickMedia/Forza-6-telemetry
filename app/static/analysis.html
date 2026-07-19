@@ -560,8 +560,9 @@
     document.getElementById("btnNote").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       const notes = prompt(
-        "Session note for AI reports. Best place for the official result " +
-        "and tune version, e.g. \"official 1:34.612 — diff tune v3\":",
+        "Session note for AI reports. Best place for the official result, " +
+        "tune version and conditions (weather isn't broadcast!), e.g. " +
+        "\"official 1:34.612 — diff tune v3 — night, light rain\":",
         btn.dataset.current || "");
       if (notes === null) return;
       try {

@@ -703,6 +703,23 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
 
     upshift_idx = np.where(np.diff(gear) > 0)[0] if gear.size > 1 else np.array([])
     shift_rpms = rpm[upshift_idx] if upshift_idx.size else np.array([])
+    # Shift-point consistency: p10–p90 spread of upshift RPM. A wide spread
+    # is a driver signal (inconsistent shift points), not a tune signal.
+    shift_rpm_spread = (round(float(np.percentile(shift_rpms, 90)
+                                    - np.percentile(shift_rpms, 10)), 0)
+                        if shift_rpms.size >= 5 else None)
+
+    # Share of moving time spent at >=90% of the session's own observed
+    # peak power — honest utilisation (relative to what was demonstrated,
+    # never to unbroadcast garage figures).
+    pct_at_peak_power = None
+    if peak_power_kw:
+        at_peak = power_w >= 0.9 * peak_power_kw * 1000.0
+        moving_time = float(np.sum(dt[speed_ms > 3.0]))
+        if moving_time > 1.0:
+            pct_at_peak_power = round(
+                float(np.sum(dt[at_peak & (speed_ms > 3.0)]))
+                / moving_time * 100.0, 1)
 
     return {
         "duration_s": round(float(np.sum(dt)), 2),
@@ -774,6 +791,7 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "torque_nm": peak_torque,
             "samples": int(np.sum(sustained)),
             "coverage_s": round(float(np.sum(dt[sustained])), 1),
+            "pct_at_peak_power": pct_at_peak_power,
             "note": "session observations during valid pulls (throttle ≥95%, "
                     "sustained), not the garage's rated figures",
         },
@@ -796,6 +814,7 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             if np.any((gear >= 1) & (gear <= 10)) else 0,
             "pct_on_limiter": round(_pct(on_limiter, dt), 1),
             "shift_rpm_avg": round(float(np.mean(shift_rpms)), 0) if shift_rpms.size else None,
+            "shift_rpm_spread": shift_rpm_spread,
             "shift_count": int(shift_rpms.size),
         },
         "max_lat_g": round(float(np.max(lat_g)) if lat_g.size else 0.0, 2),

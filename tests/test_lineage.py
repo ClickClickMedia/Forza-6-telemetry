@@ -100,6 +100,46 @@ def test_export_renders_lineage_table():
     assert "never as a reason to revert a faster setup" in md
 
 
+def test_since_last_session_clock_first_verdict():
+    """Faster session with worse balance must read as a SUCCESSFUL tune
+    (clock-first doctrine), computed from stored lineage — no scores."""
+    sd = _synthetic_session(seconds=30.0)
+    from app.laps import lap_report
+    rep = lap_report(sd)
+    cur_best = rep.get("best_lap_s")
+    assert cur_best, "synthetic must produce laps for this test"
+    lineage = [{
+        "name": "baseline", "created_at": "2026-07-18", "notes": "",
+        "best_lap": cur_best + 1.2,
+        "summary": {"best_s": cur_best + 1.2, "timing": "laps",
+                    "usi": 0.05, "spin_total_s": 10.0},
+    }]
+    md = build_markdown(sd, META, "2.1.12", lineage=lineage)
+    assert "**Since last session**" in md
+    assert "-1.200 s" in md
+    assert "trading" in md and "do not revert" in md
+
+
+def test_declared_conditions_gate_confidence():
+    """Weather is NOT broadcast (verified through a rain-to-dry capture) —
+    a 'rain'/'night' session note must reduce stated confidence."""
+    sd = _synthetic_session(seconds=30.0)
+    meta = dict(META, notes="official 1:44.8 — night, light rain")
+    md = build_markdown(sd, meta, "2.1.12")
+    assert "Reduced (wet declared)" in md
+    assert "Wet running declared" in md
+    assert "no weather or time-of-day" in md
+    # Ranked phases + evidence quality always present with cornering data.
+    assert "Corner-phase ranking" in md
+    assert "Evidence quality: cornering sample" in md
+
+
+def test_lap_consistency_line_with_three_laps():
+    sd = _synthetic_session(seconds=120.0)  # oval driver: 4-5 laps
+    md = build_markdown(sd, META, "2.1.12")
+    assert "Lap consistency" in md and "% of the median" in md
+
+
 def test_data_only_export_is_actually_data_only():
     """'Copy data only' must carry numbers and lineage, but no AI prompt,
     no handling headline and no coaching."""
