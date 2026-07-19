@@ -638,7 +638,8 @@ def _lineage_for(row: Dict[str, Any]) -> list:
 @app.get("/api/sessions/{session_id}/tuning.md")
 async def session_tuning_md(session_id: int, download: int = 0,
                             setup_id: Optional[int] = None,
-                            mode: str = "full") -> Response:
+                            mode: str = "full",
+                            style: str = "detailed") -> Response:
     import json as _json
 
     from . import __version__
@@ -656,7 +657,8 @@ async def session_tuning_md(session_id: int, download: int = 0,
     sd = _load_or_404(row)
     md = build_markdown(sd, row, __version__, setup=setup,
                         lineage=_lineage_for(row),
-                        include_fill_in=(mode != "data"))
+                        include_fill_in=(mode != "data"),
+                        verbose=(style != "compact"))
     headers = {}
     if download:
         headers["Content-Disposition"] = (

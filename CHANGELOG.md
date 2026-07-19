@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.2] - 2026-07-19
+
+### Added — analysis-context round (feedback on the setup export)
+- **Analysis context block near the top of every report**: discipline
+  (new selector in the setup form: Circuit/Touge/Dirt/Drag), driver
+  objective, this session's driver note (with a pointer when empty),
+  declared assists, setup-supplied flag and conditions — the same
+  telemetry means different things on circuit vs touge, so the framing
+  now precedes the evidence.
+- **Setup relationships**: factual derived ratios (ARB F:R, springs,
+  aero, rebound:bump per axle, diff accel/decel with an
+  "decel exceeds accel" flag) — unusual configurations become visible
+  without prescribing anything. Units note under the setup table.
+- **Assist caveats beside the numbers they qualify**: TCS-on prints with
+  the wheelspin figures, ABS-on with the lock-threshold line.
+- **Compact report style**: a Detailed/Compact toggle in the setup sheet
+  (persisted) — compact keeps every number, section sample and the
+  prompt, but drops the repeated methodology paragraphs for quick
+  phone pasting. Detailed remains the default.
+
 ## [2.2.1] - 2026-07-19
 
 ### Fixed — evidence-quality round (community field-testing of v2.2.0)

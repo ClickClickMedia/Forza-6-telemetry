@@ -59,6 +59,44 @@ def test_export_renders_declared_assists():
     assert "ABS-style slip modulation" in md
 
 
+def test_analysis_context_and_setup_relationships():
+    """Discipline/context frame the evidence up top; derived setup ratios
+    make unusual relationships visible without prescribing anything."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v1", "data": {
+        "car_text": "AMG Hammer", "discipline": "Touge",
+        "goal": "faster and more responsive",
+        "abs_assist": "On", "tcs_assist": "On",
+        "arb_f": "37.4", "arb_r": "23.9",
+        "diff_r_accel": "20", "diff_r_decel": "38",
+    }}
+    md = build_markdown(sd, META, "2.2.2", setup=setup)
+    assert "## Analysis context" in md
+    assert "Discipline: **Touge**" in md
+    assert "Driver objective: faster and more responsive" in md
+    assert "ABS on, TCS on" in md
+    assert "ARB ratio F:R **1.56**" in md
+    assert "20% accel / 38% decel** (decel exceeds accel)" in md
+    assert "Units: pressures as entered" in md
+    # TCS caveat rides beside the traction numbers, not only in setup notes.
+    assert "TCS declared on: these figures are what the assist could" in md
+    # Context block appears before the section/traction evidence.
+    assert md.index("## Analysis context") < md.index("## Balance & traction")
+
+
+def test_compact_style_trims_methodology():
+    sd = _synthetic_session(seconds=30.0)
+    full = build_markdown(sd, META, "2.2.2", verbose=True)
+    compact = build_markdown(sd, META, "2.2.2", verbose=False)
+    assert len(compact) < len(full)
+    assert "Compact evidence export" in compact
+    assert "Data provenance" not in compact
+    assert "no weather or time-of-day" not in compact
+    # The evidence itself survives intact.
+    assert "## Balance & traction" in compact
+    assert "## Balance aggregate" in compact
+
+
 def test_export_data_only_mode():
     sd = _synthetic_session(seconds=30.0)
     md = build_markdown(sd, META, "2.1.0", setup=None, include_fill_in=False)

@@ -182,7 +182,15 @@
         <label class="field full"><span>Car & build (free text)</span>
           <input id="su_car_text" type="text" placeholder="2023 Acura Integra, race engine, semi-slicks"></label>
         <label class="field full"><span>What I want from the tune</span>
-          <input id="su_goal" type="text" placeholder="touge leader, A class — less mid-corner understeer"></label>
+          <input id="su_goal" type="text" placeholder="faster and more responsive — less mid-corner understeer"></label>
+        <div class="field full"><span class="eyebrow" style="display:block;margin-bottom:5px;">Discipline</span>
+          <div class="seg" id="suDiscipline">
+            <button class="btn small" data-v="Circuit">Circuit</button>
+            <button class="btn small" data-v="Touge">Touge</button>
+            <button class="btn small" data-v="Dirt">Dirt</button>
+            <button class="btn small" data-v="Drag">Drag</button>
+          </div>
+        </div>
         <div class="field full"><span class="eyebrow" style="display:block;margin-bottom:5px;">Drivetrain (as built)</span>
           <div class="seg" id="suDrive">
             <button class="btn small" data-v="FWD">FWD</button>
@@ -266,7 +274,13 @@
           </div>
         </div>
 
-        <label class="field full frm-section"><span>Save as (optional name)</span>
+        <div class="field full frm-section"><span class="eyebrow" style="display:block;margin-bottom:5px;">Report style</span>
+          <div class="seg" id="suStyle">
+            <button class="btn small" data-v="detailed">Detailed</button>
+            <button class="btn small" data-v="compact">Compact</button>
+          </div>
+        </div>
+        <label class="field full"><span>Save as (optional name)</span>
           <input id="su_label" type="text" placeholder="auto: v1, v2, …"></label>
       </div>
     </div>
@@ -626,8 +640,9 @@
     // ABS/TCS aren't on the wire — user-declared so the report can tell
     // "braking at the ABS threshold" apart from a real lockup problem.
     // Tapping the active choice again clears it back to "not stated".
-    const ASSIST_SEGS = { abs_assist: "suAbs", tcs_assist: "suTcs" };
-    const assistVals = { abs_assist: "", tcs_assist: "" };
+    const ASSIST_SEGS = { abs_assist: "suAbs", tcs_assist: "suTcs",
+                          discipline: "suDiscipline" };
+    const assistVals = { abs_assist: "", tcs_assist: "", discipline: "" };
     function setAssist(key, v) {
       assistVals[key] = v || "";
       document.querySelectorAll("#" + ASSIST_SEGS[key] + " .btn").forEach((b) =>
@@ -674,10 +689,26 @@
       return d;
     }
 
+    // Report style (detailed methodology vs compact evidence) persists
+    // across sessions — pasting into a phone chat favours compact.
+    let reportStyle = localStorage.getItem("fh6_report_style") || "detailed";
+    function paintStyle() {
+      document.querySelectorAll("#suStyle .btn").forEach((b) =>
+        b.classList.toggle("on", b.dataset.v === reportStyle));
+    }
+    document.querySelectorAll("#suStyle .btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        reportStyle = b.dataset.v;
+        localStorage.setItem("fh6_report_style", reportStyle);
+        paintStyle();
+      }));
+    paintStyle();
+
     async function copyReport(query, btn) {
       if (btn) btn.disabled = true;
       try {
-        const md = await api("/api/sessions/" + sessionId + "/tuning.md" + (query || ""));
+        const q = (query || "") + (query ? "&" : "?") + "style=" + reportStyle;
+        const md = await api("/api/sessions/" + sessionId + "/tuning.md" + q);
         const ok = await FH.copyText(md);
         toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
                  : "Copy failed — use the .md download instead");

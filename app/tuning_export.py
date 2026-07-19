@@ -25,9 +25,9 @@ CAR_CLASS = {0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "X"}
 DRIVETRAIN = {0: "FWD", 1: "RWD", 2: "AWD"}
 
 AI_PROMPT = """\
-Analyse the telemetry evidence above together with the driver note, setup
-values and tune lineage. This export is evidence, not a diagnosis — the
-interpretation is yours.
+Analyse the telemetry evidence above together with the analysis context,
+driver note (if any), setup values and tune lineage. This export is
+evidence, not a diagnosis — the interpretation is yours.
 
 Prioritise:
 1. Lap time and like-for-like comparisons (same route, discipline and
@@ -145,6 +145,40 @@ SETUP_FIELDS = [
 ]
 
 
+def _num(v) -> Optional[float]:
+    """Parse the leading number out of a free-text setup value ('2.3 bar',
+    '37.4', '-2.0°') — None when there isn't one."""
+    import re
+    m = re.match(r"\s*(-?\d+(?:\.\d+)?)", str(v or ""))
+    return float(m.group(1)) if m else None
+
+
+def _setup_relationships(add, data: Dict[str, Any]) -> None:
+    """Factual ratios between supplied setup values — they make unusual
+    relationships visible without prescribing anything."""
+    pairs = [
+        ("ARB ratio F:R", "arb_f", "arb_r"),
+        ("Spring ratio F:R", "spring_f", "spring_r"),
+        ("Aero ratio F:R", "aero_f", "aero_r"),
+        ("Rebound:bump ratio F", "reb_f", "bump_f"),
+        ("Rebound:bump ratio R", "reb_r", "bump_r"),
+    ]
+    lines = []
+    for label, ka, kb in pairs:
+        a, b = _num(data.get(ka)), _num(data.get(kb))
+        if a is not None and b:
+            lines.append(f"{label} **{a / b:.2f}**")
+    for label, kacc, kdec in (("Rear diff", "diff_r_accel", "diff_r_decel"),
+                              ("Front diff", "diff_f_accel", "diff_f_decel")):
+        acc, dec = _num(data.get(kacc)), _num(data.get(kdec))
+        if acc is not None and dec is not None:
+            inv = " (decel exceeds accel)" if dec > acc else ""
+            lines.append(f"{label} **{acc:.0f}% accel / {dec:.0f}% decel**{inv}")
+    if lines:
+        add("- Setup relationships *(derived from the values above — "
+            "factual, not judgements)*: " + " · ".join(lines))
+
+
 def _setup_section(add, setup: Dict[str, Any]) -> None:
     data = setup.get("data") or {}
     add(f"## My setup — {setup.get('label', 'current')} *(user-entered)*")
@@ -174,6 +208,11 @@ def _setup_section(add, setup: Dict[str, Any]) -> None:
     if filled:
         add("")
         add(_md_table(["Setting", "Value"], [[l, v] for l, v in filled]))
+        add("")
+        add("- Units: pressures as entered (bar/psi); camber/toe/caster in "
+            "degrees; springs, ride height, ARB, damping, aero and diff "
+            "percentages in Forza's tuning-screen units.")
+        _setup_relationships(add, data)
     # Core settings a tuner will miss if absent — say so explicitly rather
     # than leaving the AI to guess whether they were omitted or don't exist.
     core = ["tp_f", "tp_r", "camber_f", "camber_r", "toe_f", "toe_r",
@@ -205,7 +244,8 @@ def _fmt_sample(inst: Dict[str, Any]) -> str:
     return " · ".join(bits)
 
 
-def _section_evidence(add, sections: Dict[str, Any]) -> None:
+def _section_evidence(add, sections: Dict[str, Any],
+                      verbose: bool = True) -> None:
     """Per-category driving evidence with representative samples — what
     happened, where and how often; interpretation stays with the analyst."""
     cats = [c for c in ("hairpin", "turn", "sweeper", "transfer", "straight")
@@ -214,14 +254,18 @@ def _section_evidence(add, sections: Dict[str, Any]) -> None:
         return
     add("## Section evidence")
     add("")
-    add("*(Every cornering event in the session, classified by shape — "
-        "session-wide averages hide how differently a car behaves in a "
-        "hairpin versus a fast sweeper versus a flick. Categories are "
-        "**mutually exclusive**: a transfer's two component corners count "
-        "only under transfer, and one event spans contiguous "
-        "same-direction cornering, so it may cover linked bends. `start` "
-        "is session-relative mm:ss. Full instance list: the sections.json "
-        "export.)*")
+    if verbose:
+        add("*(Every cornering event in the session, classified by shape — "
+            "session-wide averages hide how differently a car behaves in a "
+            "hairpin versus a fast sweeper versus a flick. Categories are "
+            "**mutually exclusive**: a transfer's two component corners count "
+            "only under transfer, and one event spans contiguous "
+            "same-direction cornering, so it may cover linked bends. `start` "
+            "is session-relative mm:ss. Full instance list: the sections.json "
+            "export.)*")
+    else:
+        add("*(Mutually exclusive categories; `start` is session-relative "
+            "mm:ss; full instance list in sections.json.)*")
     add("")
     th = sections.get("thresholds", {})
     for cat in cats:
@@ -329,7 +373,8 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
 def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                    setup: Dict[str, Any] = None,
                    include_fill_in: bool = True,
-                   lineage: List[Dict[str, Any]] = None) -> str:
+                   lineage: List[Dict[str, Any]] = None,
+                   verbose: bool = True) -> str:
     """Render the full tuning report for one session.
 
     ``setup`` embeds saved tuning-screen values (replacing the blank
@@ -365,13 +410,18 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"from the game's °F), speed km/h, slip channels normalized "
         f"(1.0 = grip limit), suspension travel normalised 0–1.")
     add("")
-    add("**Data provenance** — three kinds of numbers appear below, labelled:")
-    add("- *Telemetry*: read directly from the game's Data Out stream.")
-    add("- *Estimated*: derived from telemetry with stated filters "
-        "(observed peaks, detected runs, verdicts).")
-    add("- *User-entered*: car identity beyond the ordinal, and every build/"
-        "tune value — Forza does **not** broadcast upgrades, weight, tyre "
-        "compound, pressures, or any tuning-screen setting.")
+    if verbose:
+        add("**Data provenance** — three kinds of numbers appear below, labelled:")
+        add("- *Telemetry*: read directly from the game's Data Out stream.")
+        add("- *Estimated*: derived from telemetry with stated filters "
+            "(observed peaks, detected runs, verdicts).")
+        add("- *User-entered*: car identity beyond the ordinal, and every build/"
+            "tune value — Forza does **not** broadcast upgrades, weight, tyre "
+            "compound, pressures, or any tuning-screen setting.")
+    else:
+        add("*Compact evidence export — numbers are labelled telemetry / "
+            "estimated / user-entered; methodology notes live in the "
+            "detailed export.*")
     add("")
 
     data_only = not include_fill_in and setup is None
@@ -404,6 +454,34 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 f"*(utilisation relative to this session's own peak — low "
                 f"values suggest gearing keeps the engine out of its best "
                 f"range, or the track never lets it stretch)*")
+    add("")
+
+    # The same telemetry means different things on circuit, touge or dirt
+    # — frame the evidence before any of it is read.
+    sdata = (setup or {}).get("data") or {}
+    notes = (meta.get("notes") or "").strip()
+    wet_w, dark_w = _declared_conditions(notes)
+    add("## Analysis context")
+    add("")
+    add(f"- Discipline: **{sdata.get('discipline') or 'not declared'}** "
+        f"*(user-entered)*")
+    if sdata.get("goal"):
+        add(f"- Driver objective: {sdata['goal']}")
+    add(f"- Driver note for this session: "
+        + (notes if notes else "*(none — the ✎ result-note button on the "
+           "Analysis page records felt problems, official times and "
+           "conditions)*"))
+    assists_bits = []
+    if sdata.get("abs_assist"):
+        assists_bits.append(f"ABS {sdata['abs_assist'].lower()}")
+    if sdata.get("tcs_assist"):
+        assists_bits.append(f"TCS {sdata['tcs_assist'].lower()}")
+    add("- Assists: " + (", ".join(assists_bits) if assists_bits
+                         else "not declared"))
+    add("- Setup supplied: " + ("yes" if setup else "no"))
+    add("- Conditions: " + (", ".join(wet_w + dark_w) + " (user-declared)"
+                            if (wet_w or dark_w)
+                            else "not declared — assumed dry"))
     add("")
 
     add("## Session")
@@ -451,7 +529,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
 
     if sections:
-        _section_evidence(add, sections)
+        _section_evidence(add, sections, verbose=verbose)
 
     add("## Balance & traction")
     add("")
@@ -498,7 +576,11 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add(f"- Wheelspin (driven wheels): {trac.get('wheelspin_events', 0)} event(s) · "
         f"{trac.get('wheelspin_total_s', 0):.1f} s total · "
         f"longest {trac.get('wheelspin_longest_s', 0):.1f} s "
-        f"(grouped: ≥100 ms, 300 ms recovery gap)")
+        f"(grouped: ≥100 ms, 300 ms recovery gap)"
+        + (" — **TCS declared on: these figures are what the assist could "
+           "not contain, a floor not the full picture**"
+           if ((setup or {}).get("data") or {}).get("tcs_assist") == "On"
+           else ""))
     byw = trac.get("wheelspin_by_wheel_s") or {}
     if byw and trac.get("wheelspin_total_s", 0) > 0:
         single = sum(byw.values())
@@ -532,8 +614,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"({trac.get('braking_time_s', 0):.0f} s under brakes; handbrake excluded)")
     add(f"- Braking at the lock threshold (ABS-style slip modulation, wheels "
         f"still turning): {trac.get('near_lock_s', 0):.1f} s = "
-        f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time** "
-        f"— with ABS on this is the assist modulating, not wheels stopping")
+        f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time**"
+        + (" — **ABS declared on: this is the assist modulating, not wheels "
+           "stopping**"
+           if ((setup or {}).get("data") or {}).get("abs_assist") == "On"
+           else " — with ABS on this is the assist modulating, not wheels "
+                "stopping"))
     inputs = session.get("inputs", {})
     add(f"- Full throttle: {inputs.get('pct_full_throttle', 0):.1f} % of session · "
         f"Braking: {inputs.get('pct_braking', 0):.1f} %")
@@ -583,22 +669,22 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "parser fault.")
     window = temps.get("window_c", [77, 99])
     add(f"- Working window for reference: {window[0]:.0f}–{window[1]:.0f} °C — "
-        f"a generic road-racing heuristic (community optimal 88–99 °C, usable "
-        f"77–121 °C); actual targets vary by tyre compound, which telemetry "
-        f"does not report")
+        f"a generic road-racing heuristic; actual targets vary by tyre "
+        f"compound, which telemetry does not report")
     wet_w, dark_w = _declared_conditions(str(meta.get("notes") or ""))
     if wet_w or dark_w:
         add(f"- ⚠ Conditions declared in the session note "
             f"({', '.join(wet_w + dark_w)}): temperatures from wet or night "
             f"running read low.")
-    add("- Forza broadcasts **no weather or time-of-day** (verified at "
-        "packet level through a rain-to-dry session, including the one "
-        "unmapped byte) — conditions come from the driver's session note "
-        "only.")
-    add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
-        "**one temperature per tyre** (no inner/middle/outer). Pressure and "
-        "camber advice must come from the setup values filled in below plus "
-        "these axle averages — never from fabricated sensor detail.")
+    if verbose:
+        add("- Forza broadcasts **no weather or time-of-day** (verified at "
+            "packet level through a rain-to-dry session, including the one "
+            "unmapped byte) — conditions come from the driver's session note "
+            "only.")
+        add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
+            "**one temperature per tyre** (no inner/middle/outer). Pressure and "
+            "camber advice must come from the setup values filled in below plus "
+            "these axle averages — never from fabricated sensor detail.")
     front = temps.get("front", {})
     rear = temps.get("rear", {})
     short_run = (session.get("duration_s") or 0) < 300
