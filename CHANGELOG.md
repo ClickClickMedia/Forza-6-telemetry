@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.7] - 2026-07-19
+
+### Changed — progressive disclosure round (community UX feedback)
+- **The Analysis page shows four understandable actions**: ⚡ Quick
+  analysis · Engineering analysis · Copy evidence (renamed from "Data
+  only" — it copies the interpreted report without the AI prompt, not
+  raw telemetry) · **Export files ▾**, which opens a sheet with the
+  individual downloads (report .md, lap summary .csv, section data
+  .json, raw telemetry .csv) plus a new **complete package (.zip)** —
+  report, laps, sections, raw capture, metadata and the latest saved
+  tune in one attachment.
+- **Setup status is three-state**: none / partial (with the tunable
+  count — a drivetrain-only save reads "context only", never "yes") /
+  full. Context-only engineering copies carry an explicit
+  telemetry-level note so they never look more authoritative than a
+  quick analysis.
+- **Section evidence declares its scope**: when timed running is a
+  fraction of the recording, the report says so ("entire 167-second
+  recording, including driving OUTSIDE the timed running… total 34 s")
+  so an analyst never attributes whole-session cornering evidence to a
+  short run.
+- Samples whose combined slip sits at the 2.5 analysis ceiling are
+  flagged "slip saturated" so clipped rankings read as clipped.
+
 ## [2.2.6] - 2026-07-19
 
 ### Changed — quick analysis polish (field feedback)

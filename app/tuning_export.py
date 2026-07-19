@@ -201,6 +201,30 @@ _CONTEXT_FIELDS = [("drivetrain", "Drivetrain"), ("gearbox", "Gearbox"),
                    ("discipline", "Discipline"), ("abs_assist", "ABS"),
                    ("tcs_assist", "Traction control")]
 
+# The settings that make a setup a setup — context fields (drivetrain,
+# assists, discipline) alone must not read as "setup supplied".
+_CORE_TUNABLES = ["tp_f", "tp_r", "arb_f", "arb_r", "spring_f", "spring_r",
+                  "reb_f", "reb_r", "bump_f", "bump_r", "aero_f", "aero_r",
+                  "diff_f_accel", "diff_f_decel", "diff_r_accel",
+                  "diff_r_decel", "diff_accel", "diff_decel",
+                  "brake_bal", "brake_pres", "camber_f", "camber_r",
+                  "final"]
+
+
+def _setup_supplied_state(setup: Optional[Dict[str, Any]]) -> tuple:
+    """(status line, n tunables) — none / partial / full, never a bare
+    'yes' for a context-only save."""
+    if not setup:
+        return "no", 0
+    data = setup.get("data") or {}
+    n = sum(1 for k in _CORE_TUNABLES if str(data.get(k) or "").strip())
+    if n == 0:
+        return ("partial — context only (drivetrain/assists/discipline), "
+                "no tunable settings supplied", 0)
+    if n < 6:
+        return f"partial — {n} tunable setting(s) supplied", n
+    return f"yes — {n} tunable settings supplied", n
+
 
 def _setup_changes(add, data: Dict[str, Any],
                    prev_setup: Dict[str, Any]) -> None:
@@ -231,6 +255,12 @@ def _setup_section(add, setup: Dict[str, Any],
     data = setup.get("data") or {}
     add(f"## My setup — {setup.get('label', 'current')} *(user-entered)*")
     add("")
+    _, n_tunables = _setup_supplied_state(setup)
+    if n_tunables == 0:
+        add("**No tunable settings were supplied** — this setup carries "
+            "context only. Treat the analysis as telemetry-level: identify "
+            "problem areas, do not prescribe exact setting values.")
+        add("")
     if prev_setup:
         _setup_changes(add, data, prev_setup)
     if data.get("car_text"):
@@ -283,6 +313,8 @@ _SAMPLE_SKIP = {"t_start"}
 
 def _fmt_sample(inst: Dict[str, Any]) -> str:
     bits = []
+    saturated = any(isinstance(inst.get(k), (int, float))
+                    and inst[k] >= 2.5 for k in ("slip_f", "slip_r"))
     for k, v in inst.items():
         if k in _SAMPLE_SKIP:
             continue
@@ -291,11 +323,14 @@ def _fmt_sample(inst: Dict[str, Any]) -> str:
         elif isinstance(v, list):
             v = "/".join(str(x) for x in v)
         bits.append(f"{k} {v}")
+    if saturated:
+        bits.append("(slip saturated at the 2.5 analysis ceiling)")
     return " · ".join(bits)
 
 
 def _section_evidence(add, sections: Dict[str, Any],
-                      verbose: bool = True) -> None:
+                      verbose: bool = True,
+                      scope: str = None) -> None:
     """Per-category driving evidence with representative samples — what
     happened, where and how often; interpretation stays with the analyst."""
     cats = [c for c in ("hairpin", "turn", "sweeper", "transfer",
@@ -305,6 +340,9 @@ def _section_evidence(add, sections: Dict[str, Any],
         return
     add("## Section evidence")
     add("")
+    if scope:
+        add(f"**Scope: {scope}**")
+        add("")
     if verbose:
         add("*(Every cornering event in the session, classified by shape — "
             "session-wide averages hide how differently a car behaves in a "
@@ -542,7 +580,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         assists_bits.append(f"TCS {sdata['tcs_assist'].lower()}")
     add("- Assists: " + (", ".join(assists_bits) if assists_bits
                          else "not declared"))
-    add("- Setup supplied: " + ("yes" if setup else "no"))
+    supplied, _n_tunables = _setup_supplied_state(setup)
+    add("- Setup supplied: " + supplied)
     add("- Conditions: " + (", ".join(wet_w + dark_w) + " (user-declared)"
                             if (wet_w or dark_w)
                             else "not declared — assumed dry"))
@@ -593,7 +632,25 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
 
     if sections:
-        _section_evidence(add, sections, verbose=verbose)
+        # The scope matters: section evidence spans the WHOLE recording,
+        # which usually exceeds the timed running — an analyst must not
+        # attribute 89 s of cornering evidence to a 34 s run.
+        dur = session.get("duration_s") or 0
+        timed = None
+        if rep.get("event_time_s"):
+            timed = rep["event_time_s"]
+        elif rep.get("has_laps") or rep.get("has_runs"):
+            timed = sum(l["time_s"] for l in rep["laps"]
+                        if l.get("complete") and l.get("time_s"))
+        if timed and dur and timed < dur * 0.95:
+            scope = (f"the entire {dur:.0f}-second recording, including "
+                     f"driving OUTSIDE the timed running (timed laps/runs "
+                     f"total {timed:.0f} s). Use sample timestamps to "
+                     f"attribute evidence; staging, warm-up and cool-down "
+                     f"driving is included.")
+        else:
+            scope = f"the entire {dur:.0f}-second recording."
+        _section_evidence(add, sections, verbose=verbose, scope=scope)
 
     add("## Balance & traction")
     add("")

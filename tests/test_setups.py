@@ -101,6 +101,35 @@ def test_quick_variant_prompts_without_setup():
     assert "Step 0 — ask me first" in md_full
 
 
+def test_setup_supplied_three_states():
+    """Context-only saves must not read as 'setup supplied: yes' — a
+    drivetrain selection is telemetry-confirmed anyway."""
+    sd = _synthetic_session(seconds=30.0)
+    ctx_only = {"label": "v1", "data": {"drivetrain": "AWD",
+                                        "abs_assist": "On"}}
+    md = build_markdown(sd, META, "2.2.7", setup=ctx_only)
+    assert "Setup supplied: partial — context only" in md
+    assert "No tunable settings were supplied" in md
+    partial = {"label": "v2", "data": {"arb_f": "30", "tp_f": "2.1"}}
+    md2 = build_markdown(sd, META, "2.2.7", setup=partial)
+    assert "Setup supplied: partial — 2 tunable setting(s) supplied" in md2
+    full = {"label": "v3", "data": {k: "1" for k in
+            ("tp_f", "tp_r", "arb_f", "arb_r", "spring_f", "spring_r",
+             "reb_f", "bump_f")}}
+    md3 = build_markdown(sd, META, "2.2.7", setup=full)
+    assert "Setup supplied: yes — 8 tunable settings supplied" in md3
+    md4 = build_markdown(sd, META, "2.2.7")
+    assert "Setup supplied: no" in md4
+
+
+def test_section_scope_statement():
+    """Section evidence spans the whole recording; when timed running is
+    a fraction of it, the report must say so."""
+    sd = _synthetic_session(seconds=120.0)  # oval: laps ≈ most of session
+    md = build_markdown(sd, META, "2.2.7")
+    assert "**Scope: the entire" in md
+
+
 def test_undeclared_assists_read_neutral():
     sd = _synthetic_session(seconds=30.0)
     md = build_markdown(sd, META, "2.2.6", variant="quick")

@@ -46,11 +46,8 @@
         <div class="exportbar">
           <button id="btnQuick" class="btn primary">⚡ Quick analysis</button>
           <button id="btnCopySetup" class="btn">Engineering analysis</button>
-          <button id="btnCopyData" class="btn ghost">Data only</button>
-          <a id="lnkMd" class="btn ghost" href="#">.md</a>
-          <a id="lnkLapsCsv" class="btn ghost" href="#">Laps .csv</a>
-          <a id="lnkRawCsv" class="btn ghost" href="#">Raw .csv</a>
-          <a id="lnkSections" class="btn ghost" href="#">Sections .json</a>
+          <button id="btnCopyData" class="btn ghost">Copy evidence</button>
+          <button id="btnFiles" class="btn ghost">Export files ▾</button>
         </div>
       </div>
 
@@ -164,6 +161,26 @@
 
   <!-- Setup sheet: capture tuning-screen values once, reuse forever -->
   <div id="sheetBackdrop" class="sheet-backdrop hidden"></div>
+  <div id="filesSheet" class="sheet hidden" role="dialog" aria-label="Export files">
+    <header class="sheet-head">
+      <span class="eyebrow">Export files</span>
+      <button id="filesClose" class="btn small ghost">✕ Close</button>
+    </header>
+    <div class="sheet-body">
+      <div class="btnrow" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <a id="lnkMd" class="btn" href="#">Full report (.md)</a>
+        <a id="lnkLapsCsv" class="btn" href="#">Lap summary (.csv)</a>
+        <a id="lnkSections" class="btn" href="#">Section data (.json)</a>
+        <a id="lnkRawCsv" class="btn" href="#">Raw telemetry (.csv — large)</a>
+        <a id="lnkPackage" class="btn primary" href="#">Complete package (.zip)</a>
+      </div>
+      <p class="small muted" style="margin-top:10px;">
+        The package bundles the report, lap summary, section data, raw
+        telemetry, session metadata and your latest saved tune — ideal for
+        attaching a whole session to an AI or archiving a run.
+      </p>
+    </div>
+  </div>
   <div id="setupSheet" class="sheet hidden" role="dialog" aria-label="Your setup">
     <header>
       <span class="eyebrow">Your setup · saved per car</span>
@@ -524,6 +541,7 @@
       document.getElementById("lnkLapsCsv").href = "/api/sessions/" + sessionId + "/laps.csv";
       document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
       document.getElementById("lnkSections").href = "/api/sessions/" + sessionId + "/sections.json?download=1";
+      document.getElementById("lnkPackage").href = "/api/sessions/" + sessionId + "/package.zip";
       msg.classList.add("hidden");
       content.classList.add("hidden");
       loading.classList.remove("hidden");
@@ -806,6 +824,18 @@
     // Two intents, two paths: quick analysis copies immediately (no setup
     // needed — the AI locates problems from telemetry alone); engineering
     // analysis opens the setup sheet because accuracy matters there.
+    const filesSheet = document.getElementById("filesSheet");
+    function closeFiles() {
+      filesSheet.classList.add("hidden");
+      backdrop.classList.add("hidden");
+    }
+    document.getElementById("btnFiles").addEventListener("click", () => {
+      filesSheet.classList.remove("hidden");
+      backdrop.classList.remove("hidden");
+    });
+    document.getElementById("filesClose").addEventListener("click", closeFiles);
+    backdrop.addEventListener("click", closeFiles);
+
     document.getElementById("btnQuick").addEventListener("click", (e) =>
       copyReport("?mode=quick", e.currentTarget));
     document.getElementById("btnCopySetup").addEventListener("click", openSheet);
