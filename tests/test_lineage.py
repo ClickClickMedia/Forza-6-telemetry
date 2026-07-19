@@ -99,24 +99,34 @@ def test_export_renders_lineage_table():
     assert "do not revert" not in md
 
 
-def test_since_last_session_is_factual_deltas_only():
-    """The development read is raw deltas; interpretation belongs to the
-    analysis layer, never the export (evidence-not-diagnosis principle)."""
+def test_since_last_session_deltas_require_route_match():
+    """Deltas appear ONLY with an established route fingerprint (timed-loop
+    lengths within 5%), and stay factual — no verdicts. A confidently
+    wrong cross-route 'improvement' is worse than no comparison."""
     sd = _synthetic_session(seconds=30.0)
-    from app.laps import lap_report
     rep = lap_report(sd)
-    cur_best = rep.get("best_lap_s")
-    assert cur_best, "synthetic must produce laps for this test"
-    lineage = [{
+    cur = compact_summary(rep)
+    assert cur and cur.get("best_s") and cur.get("lap_route_m"), \
+        "synthetic must produce laps with route lengths for this test"
+    matched = [{
         "name": "baseline", "created_at": "2026-07-18", "notes": "",
-        "best_lap": cur_best + 1.2,
-        "summary": {"best_s": cur_best + 1.2, "timing": "laps",
-                    "usi": 0.05, "spin_total_s": 10.0},
+        "best_lap": cur["best_s"] + 1.2,
+        "summary": {"best_s": cur["best_s"] + 1.2, "timing": "laps",
+                    "usi": 0.05, "spin_total_s": 10.0,
+                    "lap_route_m": cur["lap_route_m"] * 1.02},
     }]
-    md = build_markdown(sd, META, "2.2.0", lineage=lineage)
+    md = build_markdown(sd, META, "2.2.1", lineage=matched)
     assert "**Since last session**" in md
     assert "-1.200 s" in md
     assert "Verdict:" not in md and "do not revert" not in md
+
+    # Different route (2x loop length): the delta must be suppressed.
+    mismatched = [dict(matched[0],
+                       summary=dict(matched[0]["summary"],
+                                    lap_route_m=cur["lap_route_m"] * 2.0))]
+    md2 = build_markdown(sd, META, "2.2.1", lineage=mismatched)
+    assert "no performance delta calculated" in md2
+    assert "-1.200 s" not in md2
 
 
 def test_declared_conditions_stated_factually():
@@ -148,6 +158,6 @@ def test_data_only_export_is_actually_data_only():
                         include_fill_in=False, lineage=lineage)
     assert "Prompt for the AI" not in md
     assert "fill in before asking the AI" not in md
-    assert "## Balance evidence" in md
+    assert "## Balance aggregate" in md
     assert "## Tune lineage" in md and "1:34.600" in md
     assert "## Balance & traction" in md

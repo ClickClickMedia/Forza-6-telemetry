@@ -27,8 +27,12 @@ CORNER_GAP_S = 0.5           # merge cornering blips closer than this
 SMOOTH_S = 0.25              # lateral-g smoothing window
 TRANSFER_LINK_S = 1.2        # opposite corners linked within this = transfer
 TRANSFER_MAX_REVERSAL_S = 3.0  # peak-to-peak flick time; slower = two corners
+TRANSFER_MIN_AVG_KMH = 60.0  # slower "flicks" are staging/recovery noise
+SLIP_CLIP = 2.5              # combined slip beyond this is impact noise
 HAIRPIN_MAX_MIN_KMH = 60.0   # a hairpin bottoms out below this
 HAIRPIN_MIN_HEADING_DEG = 100.0
+SWITCHBACK_MIN_HEADING_DEG = 150.0  # ≥ this counts as hairpin up to 90 km/h
+SWITCHBACK_MAX_MIN_KMH = 90.0
 SWEEPER_MIN_AVG_KMH = 120.0
 SWEEPER_MIN_KMH = 90.0       # a sweeper never drops below this
 SWEEPER_MIN_S = 2.5
@@ -36,8 +40,10 @@ TURN_MIN_HEADING_DEG = 25.0  # less net heading change than this = a kink
 STRAIGHT_MIN_M = 200.0
 WHEELS = ("FL", "FR", "RL", "RR")
 
-# What "worst" means per category (largest value ranks worst). Factual and
-# printed with the samples so the ranking is never a hidden judgement.
+# The metric each category's samples are ordered by. Purely factual —
+# samples are labelled lowest/median/highest on this metric; whether low
+# or high was GOOD is the analyst's call (a negative slip delta can be
+# useful rotation or excess oversteer; the ranking never decides).
 RANK_METRIC = {
     "hairpin": ("wheelspin_s", "driven-wheel wheelspin inside the corner"),
     "turn": ("slip_delta", "mean front-minus-rear combined slip"),
@@ -90,7 +96,10 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
     brake = sd.col("Brake") / 255.0
     route = np.cumsum(speed * dt)
 
-    slips = [sd.col(f"TireCombinedSlip{w}") for w in
+    # Combined slip spikes past 15 on kerb strikes and collisions — clip
+    # before any section statistic so one impact frame cannot poison an
+    # evidence table (an unclipped +18.84 "slip delta" once did).
+    slips = [np.minimum(sd.col(f"TireCombinedSlip{w}"), SLIP_CLIP) for w in
              ("FrontLeft", "FrontRight", "RearLeft", "RearRight")]
     slip_f = np.maximum(slips[0], slips[1])
     slip_r = np.maximum(slips[2], slips[3])
@@ -126,10 +135,15 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         sl = slice(s, e)
         min_i = s + int(np.argmin(speed[sl]))
         heading = abs(float(np.degrees(yaw[e - 1] - yaw[s])))
-        pickup = None
-        after = np.where(accel[min_i:e] > 0.5)[0]
-        if after.size:
-            pickup = round(float(t[min_i + after[0]] - t[min_i]), 2)
+        # Throttle semantics: state at entry, deepest lift, and when ≥50%
+        # throttle returned after the slowest point — "already_on" when
+        # the driver never came off it by then.
+        if accel[min_i] >= 0.5:
+            reapply = "already_on"
+        else:
+            after = np.where(accel[min_i:e] >= 0.5)[0]
+            reapply = (round(float(t[min_i + after[0]] - t[min_i]), 2)
+                       if after.size else "not_reached")
         return {
             "t_start": round(float(t[s] - t0), 2),
             "start": _fmt_t(float(t[s] - t0)),
@@ -144,7 +158,9 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             "slip_r": round(float(np.mean(slip_r[sl])), 2),
             "slip_delta": round(float(np.mean(slip_f[sl] - slip_r[sl])), 2),
             "braking_s": round(float(np.sum(dt[sl][brake[sl] > 0.1])), 2),
-            "throttle_pickup_s": pickup,
+            "throttle_at_entry_pct": round(float(accel[s]) * 100, 0),
+            "throttle_min_pct": round(float(np.min(accel[sl])) * 100, 0),
+            "throttle_reapply_s": reapply,
             "wheelspin_s": round(float(np.sum(dt[sl][spin_mask[sl]])), 2),
             "susp_travel_max": round(float(np.max(susp_max_all[sl])), 2),
             "_s": s, "_e": e,
@@ -165,6 +181,8 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             pb = b["_s"] + int(np.argmax(np.abs(lat[b["_s"]:b["_e"]])))
             if float(t[pb] - t[pa]) > TRANSFER_MAX_REVERSAL_S:
                 continue  # two linked corners, not a flick — classify each
+            if float(np.mean(kmh[sl])) < TRANSFER_MIN_AVG_KMH:
+                continue  # staging/recovery/spin noise, not a chassis flick
             transfers.append({
                 "t_start": round(float(t[s] - t0), 2),
                 "start": _fmt_t(float(t[s] - t0)),
@@ -186,8 +204,10 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         if ev["heading_deg"] < TURN_MIN_HEADING_DEG:
             continue  # a kink, not a corner
         avg_kmh = (ev["entry_kmh"] + ev["exit_kmh"] + ev["min_kmh"]) / 3.0
-        if (ev["min_kmh"] < HAIRPIN_MAX_MIN_KMH
-                and ev["heading_deg"] >= HAIRPIN_MIN_HEADING_DEG):
+        if ((ev["min_kmh"] < HAIRPIN_MAX_MIN_KMH
+                and ev["heading_deg"] >= HAIRPIN_MIN_HEADING_DEG)
+                or (ev["heading_deg"] >= SWITCHBACK_MIN_HEADING_DEG
+                    and ev["min_kmh"] < SWITCHBACK_MAX_MIN_KMH)):
             hairpins.append(ev)
         elif (ev["duration_s"] >= SWEEPER_MIN_S
                 and avg_kmh >= SWEEPER_MIN_AVG_KMH
@@ -234,12 +254,12 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         out: Dict[str, Any] = {"count": len(clean), "ranked_by": key_doc}
         if not clean:
             return out
-        vals = [(i.get(key) if i.get(key) is not None else 0.0, i)
+        vals = [(i.get(key) if isinstance(i.get(key), (int, float)) else 0.0, i)
                 for i in clean]
         vals.sort(key=lambda x: x[0])
-        out["best"] = vals[0][1]
+        out["lowest"] = vals[0][1]
         out["median"] = vals[len(vals) // 2][1]
-        out["worst"] = vals[-1][1]
+        out["highest"] = vals[-1][1]
         numeric: Dict[str, List[float]] = {}
         for i in clean:
             for k, v in i.items():
@@ -257,13 +277,22 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         "sweeper": _bucket(sweepers, "sweeper"),
         "transfer": _bucket(transfers, "transfer"),
         "straight": _bucket(straights, "straight"),
+        "classification": "mutually exclusive — a transfer's two component "
+                          "corners are counted only under transfer; an "
+                          "event spans contiguous same-direction cornering "
+                          "and may cover linked bends",
         "thresholds": {
             "cornering_lat_g": CORNER_LAT_G,
-            "hairpin": f"min speed < {HAIRPIN_MAX_MIN_KMH:.0f} km/h and "
-                       f"heading change ≥ {HAIRPIN_MIN_HEADING_DEG:.0f}°",
+            "slip_clip": SLIP_CLIP,
+            "hairpin": f"min speed < {HAIRPIN_MAX_MIN_KMH:.0f} km/h with "
+                       f"heading ≥ {HAIRPIN_MIN_HEADING_DEG:.0f}°, or "
+                       f"heading ≥ {SWITCHBACK_MIN_HEADING_DEG:.0f}° below "
+                       f"{SWITCHBACK_MAX_MIN_KMH:.0f} km/h",
             "sweeper": f"≥ {SWEEPER_MIN_S}s at avg ≥ {SWEEPER_MIN_AVG_KMH:.0f} km/h",
             "transfer": f"opposite-direction corners linked within "
-                        f"{TRANSFER_LINK_S}s",
+                        f"{TRANSFER_LINK_S}s, reversal < "
+                        f"{TRANSFER_MAX_REVERSAL_S}s, avg ≥ "
+                        f"{TRANSFER_MIN_AVG_KMH:.0f} km/h",
             "straight": f"non-cornering ≥ {STRAIGHT_MIN_M:.0f} m",
         },
     }

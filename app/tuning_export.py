@@ -94,7 +94,8 @@ def _handling_summary(add, session: Dict[str, Any], verdicts: Dict[str, Any],
         ((p["usi"], p.get("time_s", 0), pname)
          for pname, p in phases.items() if p.get("usi") is not None),
         key=lambda x: abs(x[0]), reverse=True)
-    add("## Balance evidence (session-wide)")
+    add("## Balance aggregate (session-wide — a summary of the section "
+        "evidence above, not the headline)")
     add("")
     add(f"- Session-wide balance: **{verdict}** — understeer index "
         f"{usi:+.3f} (positive = front sliding more) · front axle at "
@@ -215,8 +216,11 @@ def _section_evidence(add, sections: Dict[str, Any]) -> None:
     add("")
     add("*(Every cornering event in the session, classified by shape — "
         "session-wide averages hide how differently a car behaves in a "
-        "hairpin versus a fast sweeper versus a flick. `start` is "
-        "session-relative mm:ss. Full instance list: the sections.json "
+        "hairpin versus a fast sweeper versus a flick. Categories are "
+        "**mutually exclusive**: a transfer's two component corners count "
+        "only under transfer, and one event spans contiguous "
+        "same-direction cornering, so it may cover linked bends. `start` "
+        "is session-relative mm:ss. Full instance list: the sections.json "
         "export.)*")
     add("")
     th = sections.get("thresholds", {})
@@ -230,9 +234,10 @@ def _section_evidence(add, sections: Dict[str, Any]) -> None:
             add("- Medians: " + " · ".join(
                 f"{k} {v:g}" for k, v in med.items()
                 if k not in ("t_start",)))
-        add(f"- Samples ranked by {b.get('ranked_by', '?')} "
-            f"(best = smallest):")
-        for label in ("best", "median", "worst"):
+        add(f"- Samples ordered by **{b.get('ranked_by', '?')}** — "
+            f"lowest/median/highest are factual positions on that metric, "
+            f"not quality judgements:")
+        for label in ("lowest", "median", "highest"):
             inst = b.get(label)
             if inst:
                 add(f"  - {label}: {_fmt_sample(inst)}")
@@ -274,27 +279,40 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
         "treat a row as a baseline if the route and build match; ask me if "
         "unsure.)*")
     add("")
-    # Development read vs the most recent prior session with stored data —
-    # raw deltas plus the clock-first verdict, never a fabricated score.
+    # Development read vs the most recent prior session with stored data.
+    # Deltas are calculated ONLY when route equivalence is established
+    # (same timing kind, timed-loop lengths within 5%) — a confidently
+    # wrong cross-route "improvement" is worse than no comparison.
     prev = next((p for p in lineage if p.get("summary")), None)
     if prev and current:
         s = prev["summary"]
-        bits = []
-        pb, cb = s.get("best_s"), current.get("best_s")
+        pr, cr = s.get("lap_route_m"), current.get("lap_route_m")
         same_kind = s.get("timing") == current.get("timing")
-        if pb and cb and same_kind:
-            bits.append(f"best {_fmt_lap_time(pb)} → {_fmt_lap_time(cb)} "
-                        f"({cb - pb:+.3f} s)")
-        pu, cu = s.get("usi"), current.get("usi")
-        if pu is not None and cu is not None:
-            bits.append(f"USI {pu:+.3f} → {cu:+.3f}")
-        ps, cs = s.get("spin_total_s"), current.get("spin_total_s")
-        if ps is not None and cs is not None:
-            bits.append(f"wheelspin {ps:.1f} → {cs:.1f} s")
-        if bits:
-            add(f"**Since last session** ({prev.get('name', '?')}): "
-                + " · ".join(bits)
-                + " *(assumes same route and conditions — confirm)*")
+        route_match = (same_kind and pr and cr
+                       and abs(pr - cr) / max(pr, cr) <= 0.05)
+        if route_match:
+            bits = []
+            pb, cb = s.get("best_s"), current.get("best_s")
+            if pb and cb:
+                bits.append(f"best {_fmt_lap_time(pb)} → {_fmt_lap_time(cb)} "
+                            f"({cb - pb:+.3f} s)")
+            pu, cu = s.get("usi"), current.get("usi")
+            if pu is not None and cu is not None:
+                bits.append(f"USI {pu:+.3f} → {cu:+.3f}")
+            ps, cs = s.get("spin_total_s"), current.get("spin_total_s")
+            if ps is not None and cs is not None:
+                bits.append(f"wheelspin {ps:.1f} → {cs:.1f} s")
+            if bits:
+                add(f"**Since last session** ({prev.get('name', '?')}, "
+                    f"timed-loop length matches within 5%): "
+                    + " · ".join(bits)
+                    + " *(conditions not verifiable — confirm)*")
+                add("")
+        else:
+            add(f"Previous session found ({prev.get('name', '?')}), but no "
+                f"performance delta calculated — route equivalence was not "
+                f"established (timed-loop lengths differ, mismatch, or "
+                f"older data without a route fingerprint).")
             add("")
     add(_md_table(
         ["Session", "Date", "Best", "USI", "Wheelspin s", "Lock s",
@@ -357,11 +375,6 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
 
     data_only = not include_fill_in and setup is None
-
-    # Balance evidence is factual (no verdict language), so every export
-    # variant carries it — data-only included.
-    _handling_summary(add, session, verdicts,
-                      notes=str(meta.get("notes") or ""))
 
     add("## Car")
     add("")
@@ -437,50 +450,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         add(f"- Driver notes: {notes}")
     add("")
 
-    add("## Tyres")
-    add("")
-    tyres = session.get("tyres_c", {})
-    add(_md_table(
-        ["Tyre", "Avg °C", "Median °C", "Max °C"],
-        [[w, tyres.get(w, {}).get("avg", "–"),
-          tyres.get(w, {}).get("median", "–"),
-          tyres.get(w, {}).get("max", "–")]
-         for w in WHEELS],
-    ))
-    add("")
-    add("- Averages/medians use **active-driving frames only** (≥40 km/h) — "
-        "stationary and cool-down time excluded.")
-    if session.get("traction", {}).get("rear_temps_wire_identical"):
-        add("- Note: the game broadcasts **identical rear-left and rear-right "
-            "temperatures** for this car (verified at the packet level) — "
-            "Forza models the rear axle jointly here; it is not a sensor or "
-            "parser fault.")
-    window = temps.get("window_c", [77, 99])
-    add(f"- Working window used for verdicts: {window[0]:.0f}–{window[1]:.0f} °C — "
-        f"a generic road-racing heuristic (community optimal 88–99 °C, usable "
-        f"77–121 °C); actual targets vary by tyre compound, which telemetry "
-        f"does not report")
-    wet_w, dark_w = _declared_conditions(str(meta.get("notes") or ""))
-    if wet_w or dark_w:
-        add(f"- ⚠ Conditions declared in the session note "
-            f"({', '.join(wet_w + dark_w)}): temperatures from wet or night "
-            f"running read low — reduce confidence in cold-tyre verdicts.")
-    add("- Forza broadcasts **no weather or time-of-day** (verified at "
-        "packet level through a rain-to-dry session, including the one "
-        "unmapped byte) — conditions come from the driver's session note "
-        "only.")
-    add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
-        "**one temperature per tyre** (no inner/middle/outer). Pressure and "
-        "camber advice must come from the setup values filled in below plus "
-        "these axle averages — never from fabricated sensor detail.")
-    front = temps.get("front", {})
-    rear = temps.get("rear", {})
-    add(f"- Front axle avg **{front.get('avg_c', '?')} °C** → {front.get('verdict', '?')} · "
-        f"Rear axle avg **{rear.get('avg_c', '?')} °C** → {rear.get('verdict', '?')}")
-    add(f"- Front−rear delta: **{session.get('temp_fr_delta_c', 0):+.1f} °C** "
-        f"(positive = fronts hotter / working harder · negative = rears "
-        f"hotter / working harder)")
-    add("")
+    if sections:
+        _section_evidence(add, sections)
 
     add("## Balance & traction")
     add("")
@@ -568,9 +539,6 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"Braking: {inputs.get('pct_braking', 0):.1f} %")
     add("")
 
-    if sections:
-        _section_evidence(add, sections)
-
     add("## Suspension (normalised travel, 0 = full extension, 1 = bottomed)")
     add("")
     susp = session.get("suspension", {})
@@ -588,6 +556,63 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"{session.get('suspension_bottom_longest_s', 0):.2f} s · "
         f"99th-percentile travel {session.get('suspension_travel_p99', 0):.2f} "
         f"(brief single-frame spikes can touch 1.00 without a sustained event)")
+    add("")
+
+    # Session-wide aggregate AFTER the section evidence: it summarises the
+    # sections, it is not the headline conclusion.
+    _handling_summary(add, session, verdicts,
+                      notes=str(meta.get("notes") or ""))
+
+    add("## Tyres")
+    add("")
+    tyres = session.get("tyres_c", {})
+    add(_md_table(
+        ["Tyre", "Avg °C", "Median °C", "Max °C"],
+        [[w, tyres.get(w, {}).get("avg", "–"),
+          tyres.get(w, {}).get("median", "–"),
+          tyres.get(w, {}).get("max", "–")]
+         for w in WHEELS],
+    ))
+    add("")
+    add("- Averages/medians use **active-driving frames only** (≥40 km/h) — "
+        "stationary and cool-down time excluded.")
+    if session.get("traction", {}).get("rear_temps_wire_identical"):
+        add("- Note: the game broadcasts **identical rear-left and rear-right "
+            "temperatures** for this car (verified at the packet level) — "
+            "Forza models the rear axle jointly here; it is not a sensor or "
+            "parser fault.")
+    window = temps.get("window_c", [77, 99])
+    add(f"- Working window for reference: {window[0]:.0f}–{window[1]:.0f} °C — "
+        f"a generic road-racing heuristic (community optimal 88–99 °C, usable "
+        f"77–121 °C); actual targets vary by tyre compound, which telemetry "
+        f"does not report")
+    wet_w, dark_w = _declared_conditions(str(meta.get("notes") or ""))
+    if wet_w or dark_w:
+        add(f"- ⚠ Conditions declared in the session note "
+            f"({', '.join(wet_w + dark_w)}): temperatures from wet or night "
+            f"running read low.")
+    add("- Forza broadcasts **no weather or time-of-day** (verified at "
+        "packet level through a rain-to-dry session, including the one "
+        "unmapped byte) — conditions come from the driver's session note "
+        "only.")
+    add("- Honesty note: Forza's Data Out has **no tyre-pressure channel** and "
+        "**one temperature per tyre** (no inner/middle/outer). Pressure and "
+        "camber advice must come from the setup values filled in below plus "
+        "these axle averages — never from fabricated sensor detail.")
+    front = temps.get("front", {})
+    rear = temps.get("rear", {})
+    short_run = (session.get("duration_s") or 0) < 300
+    if short_run:
+        add(f"- Front axle active-driving avg **{front.get('avg_c', '?')} °C** · "
+            f"rear **{rear.get('avg_c', '?')} °C** — short session: "
+            f"steady-state may not have been reached, so no in/below/above-"
+            f"window conclusion is drawn from this run alone")
+    else:
+        add(f"- Front axle avg **{front.get('avg_c', '?')} °C** → {front.get('verdict', '?')} · "
+            f"Rear axle avg **{rear.get('avg_c', '?')} °C** → {rear.get('verdict', '?')}")
+    add(f"- Front−rear delta: **{session.get('temp_fr_delta_c', 0):+.1f} °C** "
+        f"(positive = fronts hotter / working harder · negative = rears "
+        f"hotter / working harder)")
     add("")
 
     add("## Gearing")
@@ -652,14 +677,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             add("")
 
     if lineage:
-        cur_summary = {
-            "best_s": rep.get("best_lap_s"),
-            "timing": ("laps" if rep.get("has_laps")
-                       else "runs" if rep.get("has_runs") else None),
-            "usi": balance.get("understeer_index"),
-            "spin_total_s": (session.get("traction") or {}).get("wheelspin_total_s"),
-        }
-        _lineage_section(add, lineage, current=cur_summary)
+        from .laps import compact_summary
+        _lineage_section(add, lineage, current=compact_summary(rep) or {})
 
     if setup is not None:
         _setup_section(add, setup)

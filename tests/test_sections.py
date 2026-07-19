@@ -46,13 +46,13 @@ def test_sections_classify_crafted_shapes():
     sec = detect_sections(_crafted_session())
     assert sec is not None
     assert sec["hairpin"]["count"] >= 1
-    hp = sec["hairpin"]["worst"]
+    hp = sec["hairpin"]["highest"]
     assert hp["min_kmh"] < 60 and hp["heading_deg"] >= 100
     assert sec["transfer"]["count"] >= 1
-    tr = sec["transfer"]["worst"]
+    tr = sec["transfer"]["highest"]
     assert tr["reversal_s"] < 3.0
     assert sec["straight"]["count"] >= 1
-    st = sec["straight"]["worst"]
+    st = sec["straight"]["highest"]
     assert st["length_m"] >= 200
     # Representative samples carry timestamps the AI can find in the CSV.
     assert ":" in hp["start"]
@@ -69,7 +69,7 @@ def test_report_carries_section_evidence():
     md = build_markdown(_crafted_session(), META, "2.2.0")
     assert "## Section evidence" in md
     assert "### Hairpin" in md
-    assert "ranked by" in md.lower()
+    assert "ordered by" in md.lower()
     # Evidence, not verdicts: the export never prescribes settings.
     for banned in ("increase rear", "reduce front", "recommend increasing",
                    "you should"):

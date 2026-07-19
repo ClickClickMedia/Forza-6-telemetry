@@ -971,10 +971,18 @@ def compact_summary(rep: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     trac = session.get("traction") or {}
     bal = (rep.get("verdicts") or {}).get("balance") or {}
     g = session.get("gearing") or {}
+    lap_routes = [l.get("route_m") or l.get("distance_m")
+                  for l in rep.get("laps", [])
+                  if l.get("complete")
+                  and (l.get("route_m") or l.get("distance_m"))]
     return {
         "best_s": rep.get("best_lap_s"),
         "timing": ("laps" if rep.get("has_laps")
                    else "runs" if rep.get("has_runs") else None),
+        # Median timed-loop length: the route fingerprint that gates
+        # cross-session performance deltas (never compare across routes).
+        "lap_route_m": (round(float(np.median(lap_routes)), 1)
+                        if lap_routes else None),
         "usi": bal.get("understeer_index"),
         "spin_total_s": trac.get("wheelspin_total_s"),
         "spin_multi_s": trac.get("wheelspin_multi_s"),

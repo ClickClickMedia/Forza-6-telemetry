@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.1] - 2026-07-19
+
+### Fixed — evidence-quality round (community field-testing of v2.2.0)
+- **Cross-route lineage deltas suppressed**: performance deltas are
+  calculated only when route equivalence is established (same timing
+  kind, median timed-loop lengths within 5%); otherwise the report says
+  so and calculates nothing. A confidently wrong "-35 s improvement"
+  between different events is worse than no comparison.
+- **Slip values clipped at 2.5 before any section statistic** — one
+  collision frame can no longer put a "+18.84 slip delta" in an evidence
+  table — and **low-speed "transfers" filtered** (avg ≥ 60 km/h;
+  staging/spin recovery is not a chassis flick).
+- **Sample labels are factual**: lowest / median / highest on the stated
+  metric (in the report and sections.json) — whether low was good is the
+  analyst's call, not a "best/worst" judgement.
+- **Category exclusivity stated**: classifications are mutually
+  exclusive; one event spans contiguous same-direction cornering and may
+  cover linked bends.
+- **Hairpin rule widened**: heading ≥ 150° below 90 km/h also counts
+  (switchbacks previously landed in "turn").
+- **Throttle semantics**: `throttle_at_entry_pct`, `throttle_min_pct`
+  and `throttle_reapply_s` (with `already_on` / `not_reached`) replace
+  the ambiguous zero-valued pickup field.
+- **Report order**: section evidence now comes before the session-wide
+  aggregate, which is titled as a summary of the sections — facts before
+  any aggregate framing.
+- **Short sessions draw no tyre-window conclusion**: under 5 minutes the
+  report gives the recorded averages and says steady-state may not have
+  been reached.
+
 ## [2.2.0] - 2026-07-19
 
 ### Changed — the report is now an evidence packet, not a diagnosis
