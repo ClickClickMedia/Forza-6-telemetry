@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.6] - 2026-07-19
+
+### Changed — quick analysis polish (field feedback)
+- **Quick analysis has its own purpose-built prompt**: identify where
+  performance is lost by section, which domain the evidence points at
+  (driving / traction / balance / suspension / braking / gearing),
+  which setup areas to inspect without inventing values, and the
+  confidence per conclusion. The engineering prompt is unchanged.
+- **No more mandatory identity gate on quick copies**: instead of
+  stopping to ask year/make/model first, the AI is told to analyse
+  immediately with what's here and ask for car/build details at the end
+  only if they would materially refine the next step. Engineering mode
+  keeps the strict Step-0 gate.
+- **Two-instance categories label samples lower/higher** — no invented
+  "median" member from an even pair.
+- Hairpin sections are headed **"Hairpin / switchback"** (the ≥150°
+  below 90 km/h clause catches fast switchbacks that aren't classic
+  sub-60 km/h hairpins).
+- **Undeclared assists read neutrally**: the lock-threshold line says
+  interpretation depends on ABS use, instead of assuming ABS is on.
+
 ## [2.2.5] - 2026-07-19
 
 ### Changed — two intents, two workflows (community product feedback)

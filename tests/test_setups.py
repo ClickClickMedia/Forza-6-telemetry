@@ -56,7 +56,7 @@ def test_export_renders_declared_assists():
     assert "the assist modulating" in md
     # Every report carries both brake numbers, clearly told apart.
     assert "Sustained brake locks" in md
-    assert "ABS-style slip modulation" in md
+    assert "deep slip, wheels still" in md
 
 
 def test_analysis_context_and_setup_relationships():
@@ -85,16 +85,26 @@ def test_analysis_context_and_setup_relationships():
 
 
 def test_quick_variant_prompts_without_setup():
-    """Quick analysis: telemetry evidence + prompt, no setup, no fill-in
-    template — the AI is told to locate problems and name setup AREAS,
-    never invent values."""
+    """Quick analysis: telemetry evidence + a purpose-built prompt, no
+    setup, no fill-in template, and NO mandatory identity gate — value
+    first, identity question only at the end if it would refine."""
     sd = _synthetic_session(seconds=30.0)
-    md = build_markdown(sd, META, "2.2.5", variant="quick")
+    meta = dict(META, car_name=None)  # unknown car
+    md = build_markdown(sd, meta, "2.2.6", variant="quick")
     assert "Setup not supplied" in md
-    assert "areas" in md and "Never invent specific setting values" in md
-    assert "## Prompt for the AI" in md
+    assert "telemetry-only report" in md
+    assert "Do not require car identity" in md
+    assert "Step 0 — ask me first" not in md
     assert "fill in before asking the AI" not in md
-    assert "## Section evidence" in md or "## Balance & traction" in md
+    # Engineering mode keeps the mandatory identity gate.
+    md_full = build_markdown(sd, meta, "2.2.6")
+    assert "Step 0 — ask me first" in md_full
+
+
+def test_undeclared_assists_read_neutral():
+    sd = _synthetic_session(seconds=30.0)
+    md = build_markdown(sd, META, "2.2.6", variant="quick")
+    assert "assists undeclared: interpretation depends on ABS use" in md
 
 
 def test_setup_changes_since_previous_revision():

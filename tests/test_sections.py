@@ -109,6 +109,18 @@ def test_launch_separated_from_flying_straights():
             assert float(inst["speed_kmh"].split("→")[0]) >= 30
 
 
+def test_two_instance_bucket_uses_lower_higher():
+    """An even pair has no median member — never invent one."""
+    sd = _crafted_session()
+    sec = detect_sections(sd)
+    for cat in ("hairpin", "turn", "sweeper", "transfer", "straight"):
+        b = sec[cat]
+        if b["count"] == 2:
+            assert "lower" in b and "higher" in b and "median" not in b
+        elif b["count"] == 1:
+            assert "only" in b
+
+
 def test_sections_none_for_tiny_session():
     sd = _synthetic_session(seconds=5.0)
     sd.columns["Speed"] = np.zeros(sd.n)

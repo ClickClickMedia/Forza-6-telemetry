@@ -46,6 +46,24 @@ the clock is improving, or driver variance dominates.
 Never invent data this export does not contain.
 """
 
+QUICK_PROMPT = """\
+Analyse this telemetry-only report (no setup was supplied).
+
+Identify:
+1. Where the car is losing performance, by section type.
+2. Whether the strongest evidence points to driving, traction, balance,
+   suspension, braking or gearing.
+3. The setup areas worth inspecting — without inventing values.
+4. Your confidence level and the evidence for each conclusion.
+
+Do not prescribe exact settings: no setup was supplied.
+Do not require car identity before giving useful telemetry-level
+findings — analyse immediately with what is here, state the limits, and
+ask for car/build details at the end only if they would materially
+refine the next step.
+Never invent data this export does not contain.
+"""
+
 # Condition words scanned in the driver's session note — Forza broadcasts
 # NO weather or time-of-day (verified at packet level, including the one
 # unmapped byte, through an actual rain-to-dry session), so conditions are
@@ -301,9 +319,10 @@ def _section_evidence(add, sections: Dict[str, Any],
             "mm:ss; full instance list in sections.json.)*")
     add("")
     th = sections.get("thresholds", {})
+    display = {"hairpin": "Hairpin / switchback"}
     for cat in cats:
         b = sections[cat]
-        add(f"### {cat.capitalize()} × {b['count']}"
+        add(f"### {display.get(cat, cat.capitalize())} × {b['count']}"
             + (f"  *({th.get(cat)})*" if th.get(cat) else ""))
         add("")
         med = b.get("median_metrics") or {}
@@ -316,9 +335,9 @@ def _section_evidence(add, sections: Dict[str, Any],
                 f"{_fmt_sample(b['only'])}")
         else:
             add(f"- Samples ordered by **{b.get('ranked_by', '?')}** — "
-                f"lowest/median/highest are factual positions on that "
-                f"metric, not quality judgements:")
-            for label in ("lowest", "median", "highest"):
+                f"positions on that metric, not quality judgements:")
+            for label in ("only", "lower", "higher",
+                          "lowest", "median", "highest"):
                 inst = b.get(label)
                 if inst:
                     add(f"  - {label}: {_fmt_sample(inst)}")
@@ -670,14 +689,16 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"{trac.get('brake_lock_rear_s', 0):.1f} s · "
         f"**{trac.get('lock_pct_of_braking', 0):.0f}% of braking time** "
         f"({trac.get('braking_time_s', 0):.0f} s under brakes; handbrake excluded)")
-    add(f"- Braking at the lock threshold (ABS-style slip modulation, wheels "
-        f"still turning): {trac.get('near_lock_s', 0):.1f} s = "
+    abs_decl = ((setup or {}).get("data") or {}).get("abs_assist")
+    add(f"- Braking at the lock threshold (deep slip, wheels still "
+        f"turning): {trac.get('near_lock_s', 0):.1f} s = "
         f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time**"
-        + (" — **ABS declared on: this is the assist modulating, not wheels "
-           "stopping**"
-           if ((setup or {}).get("data") or {}).get("abs_assist") == "On"
-           else " — with ABS on this is the assist modulating, not wheels "
-                "stopping"))
+        + (" — **ABS declared on: this is the assist modulating, not "
+           "wheels stopping**" if abs_decl == "On" else
+           " — ABS declared off: driver threshold braking"
+           if abs_decl == "Off" else
+           " — assists undeclared: interpretation depends on ABS use and "
+           "load transfer (declare assists in the setup for a firmer read)"))
     inputs = session.get("inputs", {})
     add(f"- Full throttle: {inputs.get('pct_full_throttle', 0):.1f} % of session · "
         f"Braking: {inputs.get('pct_braking', 0):.1f} %")
@@ -863,14 +884,14 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     if not data_only:
         add("## Prompt for the AI")
         add("")
-        if not car_name:
+        if not car_name and not quick:
             add(f"**Step 0 — ask me first:** this tool only knows the car as "
                 f"Forza ordinal {meta.get('car_ordinal', '?')}. Before any "
                 f"analysis, ask me the year, make, model and my key build "
                 f"choices (engine/aspiration swaps, tyre compound, aero), and "
                 f"use my answer as the car identity throughout.")
             add("")
-        add(AI_PROMPT)
+        add(QUICK_PROMPT if quick else AI_PROMPT)
     return "\n".join(lines)
 
 

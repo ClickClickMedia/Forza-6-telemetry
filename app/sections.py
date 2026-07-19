@@ -276,9 +276,14 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
         vals = [(i.get(key) if isinstance(i.get(key), (int, float)) else 0.0, i)
                 for i in clean]
         vals.sort(key=lambda x: x[0])
-        out["lowest"] = vals[0][1]
-        out["median"] = vals[len(vals) // 2][1]
-        out["highest"] = vals[-1][1]
+        if len(vals) == 2:
+            # No invented "median" member from an even pair.
+            out["lower"] = vals[0][1]
+            out["higher"] = vals[1][1]
+        else:
+            out["lowest"] = vals[0][1]
+            out["median"] = vals[len(vals) // 2][1]
+            out["highest"] = vals[-1][1]
         numeric: Dict[str, List[float]] = {}
         for i in clean:
             for k, v in i.items():
