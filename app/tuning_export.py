@@ -41,8 +41,12 @@ Do not assume a lower understeer index is automatically faster.
 Do not recommend changes from session-wide averages alone.
 Distinguish circuit, touge, dirt and other disciplines from the evidence.
 Treat wet, night or rewind-affected running separately where declared.
+Separate driver observations from setup hypotheses — recommend a setup
+change only when the telemetry supports it independently of likely
+driver variation.
 "No setup change recommended" is a valid answer when evidence is weak,
-the clock is improving, or driver variance dominates.
+the clock is improving, or driver variance dominates — prefer "collect
+more evidence" over speculative tuning.
 Never invent data this export does not contain.
 """
 
@@ -51,12 +55,17 @@ Analyse this telemetry-only report (no setup was supplied).
 
 Identify:
 1. Where the car is losing performance, by section type.
-2. Whether the strongest evidence points to driving, traction, balance,
-   suspension, braking or gearing.
+2. Your findings ranked strongest to weakest, each labelled with
+   strong, moderate or weak evidence (driving, traction, balance,
+   suspension, braking and gearing are all candidate domains).
 3. The setup areas worth inspecting — without inventing values.
-4. Your confidence level and the evidence for each conclusion.
+4. Driver observations, kept separate from setup hypotheses — suggest a
+   setup direction only when the telemetry supports it independently of
+   likely driver variation.
 
 Do not prescribe exact settings: no setup was supplied.
+If the telemetry does not justify a setup change, say so — prefer
+"collect more evidence" over speculative tuning.
 Do not require car identity before giving useful telemetry-level
 findings — analyse immediately with what is here, state the limits, and
 ask for car/build details at the end only if they would materially

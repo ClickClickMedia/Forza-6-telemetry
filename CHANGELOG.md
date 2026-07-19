@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.8] - 2026-07-20
+
+### Changed
+- Prompt refinements: findings are ranked strongest-to-weakest with
+  strong/moderate/weak evidence labels; driver observations are kept
+  separate from setup hypotheses (a setup direction needs telemetry
+  support independent of likely driver variation); and both prompts
+  prefer "collect more evidence" over speculative tuning when the
+  telemetry doesn't justify a change.
+
 ## [2.2.7] - 2026-07-19
 
 ### Changed — progressive disclosure round (community UX feedback)
