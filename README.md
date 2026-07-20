@@ -5,15 +5,24 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![No cloud](https://img.shields.io/badge/cloud-none-informational.svg)
 
-Turn your phone into a **live pit instrument** for **Forza Horizon 6** — and
-turn your laps into **AI-ready tuning reports**.
+Turn your phone into a **live pit instrument** for **Forza Horizon 6**, and
+turn your laps into a **readable telemetry report**.
 
 This is a free, open-source, self-hosted tool. It listens to the telemetry
 Forza already broadcasts (the built-in **Data Out** feature), shows a live
-dashboard on your phone, records every drive, breaks sessions into **laps
-with tuning-grade stats**, and exports a report you can paste straight into
-**Claude or ChatGPT** for setup advice. Everything stays on your own Wi-Fi —
-**no cloud, no account, no subscription**.
+dashboard on your phone, records every drive, and breaks each session into
+**laps and corner-by-corner evidence** — throttle traces, entry/exit
+speeds, slip by corner, tyre temps, wheelspin patterns, gearing. Everything
+stays on your own Wi-Fi — **no cloud, no account, no subscription**.
+
+> **This tool is not an AI, and it doesn't tune your car.** It's a
+> telemetry analyser that produces a report *you read yourself* —
+> [here's a real one](docs/example-report.md). It never invents setup
+> values. It's a **companion to** an AI, not a replacement for you: if you
+> want, you can paste the report into Claude or ChatGPT to help interpret
+> it (that's an optional, separate step you choose to do), but the numbers,
+> the comparisons and the decisions are all yours. Prefer to skip the AI
+> entirely? Just read the report.
 
 | Live · on the phone | Session analysis | Laps & route |
 | --- | --- | --- |

@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.3.1] - 2026-07-20
+
+### Fixed
+- **Lap table numbers laps sequentially (1, 2, 3)** instead of echoing the
+  wire lap number — on point-to-point/touge events FH6 keeps LapNumber at
+  0, so every lap used to display as "Lap 0". The times and validity were
+  always correct; only the label was confusing.
+
+### Added
+- **[docs/example-report.md](docs/example-report.md)** — a real, full
+  session report you can read without running anything, linked from the
+  README. Makes plain that the tool produces a human-readable report, not
+  AI output.
+- README reframed: the tool is a telemetry analyser you read yourself; an
+  AI is an optional companion for interpretation, never a replacement and
+  never a tuner. It does not invent setup values.
+
 ## [2.3.0] - 2026-07-20
 
 ### Changed — blind-context round (a fresh AI must understand a session

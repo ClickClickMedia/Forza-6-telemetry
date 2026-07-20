@@ -886,12 +886,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         add("")
         rows = []
         any_rewind = False
+        seq = 0  # sequential lap counter for display — the wire lap number
+        # is 0-based and, on point-to-point events, can stay 0 the whole run
         for l in rep["laps"]:
             if l.get("run"):
                 label = f"Run {l['run']}"
                 extra = f" · {l.get('route_m', 0) / 1000:.1f} km route"
             else:
-                label = str(l["lap"]) if l["lap"] is not None else "–"
+                seq += 1
+                label = str(seq)
                 extra = (f" · {l['route_m'] / 1000:.2f} km"
                          if l.get("route_m") else "")
             if l.get("rewind_affected"):
