@@ -369,7 +369,10 @@ def _section_evidence(add, sections: Dict[str, Any],
     display = {"hairpin": "Hairpin / switchback"}
     for cat in cats:
         b = sections[cat]
+        outside = b.get("outside_timed")
         add(f"### {display.get(cat, cat.capitalize())} × {b['count']}"
+            + (f" ({outside} outside timed running — excluded from the "
+               f"medians and samples below)" if outside else "")
             + (f"  *({th.get(cat)})*" if th.get(cat) else ""))
         add("")
         med = b.get("median_metrics") or {}
@@ -479,7 +482,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                    lineage: List[Dict[str, Any]] = None,
                    verbose: bool = True,
                    variant: str = None,
-                   prev_setup: Dict[str, Any] = None) -> str:
+                   prev_setup: Dict[str, Any] = None,
+                   saved_context: Dict[str, Any] = None) -> str:
     """Render the tuning report for one session.
 
     Three variants serve two user intents plus a machine path:
@@ -499,8 +503,11 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     verdicts = rep["verdicts"] or {}
     balance = verdicts.get("balance", {})
     temps = verdicts.get("tyre_temps", {})
+    timed_windows = [(l["t_start"], l["t_end"]) for l in rep.get("laps", [])
+                     if (l.get("lap") is not None or l.get("run"))
+                     and l.get("t_start") is not None]
     try:
-        sections = detect_sections(sd)
+        sections = detect_sections(sd, timed_windows=timed_windows or None)
     except Exception:  # section evidence must never sink the whole report
         sections = None
 
@@ -568,12 +575,23 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
 
     # The same telemetry means different things on circuit, touge or dirt
-    # — frame the evidence before any of it is read.
+    # — frame the evidence before any of it is read. Quick copies inherit
+    # the saved car profile's NON-tune context (discipline, assists):
+    # discarding harmless known context would reduce analytical quality
+    # without reducing user friction.
     sdata = (setup or {}).get("data") or {}
+    from_profile = False
+    if not sdata and saved_context:
+        sdata = saved_context
+        from_profile = True
     notes = (meta.get("notes") or "").strip()
     wet_w, dark_w = _declared_conditions(notes)
     add("## Analysis context")
     add("")
+    if from_profile and (sdata.get("discipline") or sdata.get("abs_assist")
+                         or sdata.get("tcs_assist")):
+        add("*(Context loaded from the saved car profile; tune values "
+            "omitted.)*")
     add(f"- Discipline: **{sdata.get('discipline') or 'not declared'}** "
         f"*(user-entered)*")
     if sdata.get("goal"):
@@ -615,8 +633,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             + (f" · {n_partial} partial segment(s) — never ranked"
                if n_partial else "")
             + f" · best lap **{_fmt_lap_time(best)}** "
-            f"*(estimated, line-to-line; a mid-race rewind stretches that "
-            f"lap's time and route but never corrupts the others)*")
+            f"*(estimated, line-to-line; rewind-affected laps are marked "
+            f"in the lap table and excluded from the best)*")
     elif rep["has_laps"]:
         add(f"- Laps completed: {n_complete} · Best lap: **{_fmt_lap_time(best)}**")
     elif rep.get("has_runs"):
@@ -722,8 +740,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"(grouped: ≥100 ms, 300 ms recovery gap)"
         + (" — **TCS declared on: these figures are what the assist could "
            "not contain, a floor not the full picture**"
-           if ((setup or {}).get("data") or {}).get("tcs_assist") == "On"
-           else ""))
+           if sdata.get("tcs_assist") == "On" else ""))
     byw = trac.get("wheelspin_by_wheel_s") or {}
     if byw and trac.get("wheelspin_total_s", 0) > 0:
         single = sum(byw.values())
@@ -755,7 +772,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"{trac.get('brake_lock_rear_s', 0):.1f} s · "
         f"**{trac.get('lock_pct_of_braking', 0):.0f}% of braking time** "
         f"({trac.get('braking_time_s', 0):.0f} s under brakes; handbrake excluded)")
-    abs_decl = ((setup or {}).get("data") or {}).get("abs_assist")
+    abs_decl = sdata.get("abs_assist")
     add(f"- Braking at the lock threshold (deep slip, wheels still "
         f"turning): {trac.get('near_lock_s', 0):.1f} s = "
         f"**{trac.get('near_lock_pct_of_braking', 0):.0f}% of braking time**"
@@ -835,12 +852,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     short_run = (session.get("duration_s") or 0) < 300
     if short_run:
         add(f"- Front axle active-driving avg **{front.get('avg_c', '?')} °C** · "
-            f"rear **{rear.get('avg_c', '?')} °C** — short session: "
-            f"steady-state may not have been reached, so no in/below/above-"
-            f"window conclusion is drawn from this run alone")
+            f"rear **{rear.get('avg_c', '?')} °C** — steady-state not "
+            f"confirmed (tyre compound, starting temperature and prior "
+            f"running are unknown), so no in/below/above-window conclusion "
+            f"is drawn from this run alone")
     else:
         add(f"- Front axle avg **{front.get('avg_c', '?')} °C** → {front.get('verdict', '?')} · "
-            f"Rear axle avg **{rear.get('avg_c', '?')} °C** → {rear.get('verdict', '?')}")
+            f"Rear axle avg **{rear.get('avg_c', '?')} °C** → {rear.get('verdict', '?')} "
+            f"*(steady-state not confirmed — compound and prior running "
+            f"unknown)*")
     add(f"- Front−rear delta: **{session.get('temp_fr_delta_c', 0):+.1f} °C** "
         f"(positive = fronts hotter / working harder · negative = rears "
         f"hotter / working harder)")
@@ -854,7 +874,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"Avg shift RPM: {g.get('shift_rpm_avg') or '–'}")
     if g.get("shift_rpm_spread") is not None:
         add(f"- Shift-point spread (p10–p90 of upshift RPM): "
-            f"**{g['shift_rpm_spread']:.0f} rpm** *(driver-variance signal)*")
+            f"**{g['shift_rpm_spread']:.0f} rpm** *(may reflect driver "
+            f"variation, corner context or partial-throttle shifts)*")
     add(f"- Time on limiter (≥97% max RPM): {g.get('pct_on_limiter', 0):.1f} %")
     add("")
 
@@ -864,6 +885,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             if rep.get("lap_source") == "position-gate" else "## Laps")
         add("")
         rows = []
+        any_rewind = False
         for l in rep["laps"]:
             if l.get("run"):
                 label = f"Run {l['run']}"
@@ -872,10 +894,17 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 label = str(l["lap"]) if l["lap"] is not None else "–"
                 extra = (f" · {l['route_m'] / 1000:.2f} km"
                          if l.get("route_m") else "")
+            if l.get("rewind_affected"):
+                validity = "rewind-affected"
+                any_rewind = True
+            elif not l.get("complete"):
+                validity = "partial"
+            else:
+                validity = "valid"
             rows.append([
                 label,
-                _fmt_lap_time(l.get("time_s"))
-                + ("" if l.get("complete") else " *(partial)*") + extra,
+                validity,
+                _fmt_lap_time(l.get("time_s")) + extra,
                 f"{l['speed']['avg_kmh']:.0f}",
                 f"{l['speed']['max_kmh']:.0f}",
                 f"{l['inputs']['pct_full_throttle']:.0f}",
@@ -884,11 +913,18 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 f"{l['temp_fr_delta_c']:+.1f}",
             ])
         add(_md_table(
-            ["Lap", "Time", "Avg km/h", "Max km/h", "Full-thr %", "Brake %",
-             "USI", "F−R °C"],
+            ["Lap", "Validity", "Time", "Avg km/h", "Max km/h",
+             "Full-thr %", "Brake %", "USI", "F−R °C"],
             rows,
         ))
         add("")
+        if any_rewind:
+            add("- **Rewind-affected laps contain re-driven road**: their "
+                "elapsed time and route are invalid for performance "
+                "comparison and they are excluded from the best lap; the "
+                "telemetry within them is real and remains in the section "
+                "evidence.")
+            add("")
         complete = [l for l in rep["laps"]
                     if l.get("complete") and l.get("time_s")
                     and l.get("lap") is not None]
@@ -958,6 +994,9 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 f"use my answer as the car identity throughout.")
             add("")
         add(QUICK_PROMPT if quick else AI_PROMPT)
+    else:
+        add("*This export contains evidence only and makes no request for "
+            "analysis.*")
     return "\n".join(lines)
 
 
@@ -971,7 +1010,10 @@ _LAP_CSV_HEADER = [
     "temp_front_avg_c", "temp_rear_avg_c", "temp_fr_delta_c",
     "susp_fl_max", "susp_fr_max", "susp_rl_max", "susp_rr_max",
     "bottom_out_events", "top_gear", "shift_rpm_avg", "pct_on_limiter",
-    "max_lat_g",
+    # raw_max includes kerb/impact spikes — machine readers must not treat
+    # it as grip; sustained is the filtered handling figure.
+    "raw_max_lat_g", "sustained_lat_g", "rewind_affected",
+    "t_start_s", "t_end_s",
 ]
 
 
@@ -1003,6 +1045,8 @@ def build_laps_csv(sd: SessionData) -> str:
             l.get("suspension_bottom_out_events"),
             l["gearing"]["top_gear"], l["gearing"]["shift_rpm_avg"],
             l["gearing"]["pct_on_limiter"],
-            l.get("max_lat_g"),
+            l.get("max_lat_g"), l.get("lat_g_sustained"),
+            int(bool(l.get("rewind_affected"))),
+            l.get("t_start"), l.get("t_end"),
         ])
     return buf.getvalue()

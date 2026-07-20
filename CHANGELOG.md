@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-07-20
+
+### Changed — blind-context round (a fresh AI must understand a session
+### with no chat history)
+- **Rewind-affected laps are identified by name**: a lap spanning a
+  rewind snap is flagged in the lap table's new Validity column
+  (valid / partial / rewind-affected), excluded from the best lap, and
+  explained in one line — no more inferring validity from prose.
+- **Every lap carries session-relative t_start/t_end**, in the report
+  data, laps.csv and package metadata — evidence attribution by
+  timestamp instead of guesswork.
+- **Section samples come from timed running**: instances outside the
+  timed laps/runs are labelled and excluded from medians and
+  representative samples (a staging shuffle can no longer be a
+  category's "lowest"); headings show how many were excluded.
+- **Quick analysis inherits saved non-tune context** (discipline,
+  assists, gearbox, car name) from the car's saved profile, labelled
+  "Context loaded from the saved car profile; tune values omitted" —
+  TCS-on now correctly frames wheelspin in quick copies while setup
+  still reads "not supplied".
+- **laps.csv renames max lateral G to `raw_max_lat_g` and adds
+  `sustained_lat_g`**, plus `rewind_affected` and `t_start_s`/`t_end_s`
+  columns — machine readers can no longer mistake a 6.99 g impact spike
+  for grip.
+- **package.zip metadata now carries** discipline, assists, per-lap
+  validity, timed windows, section-evidence scope and honest setup
+  provenance flags (`setup_source: saved_latest`,
+  `setup_snapshot_at_recording: false`); the README states the setup
+  may postdate the recording. A recording-time setup snapshot remains
+  issue #2.
+- Copy-evidence exports end with "contains evidence only and makes no
+  request for analysis"; tyre steady-state wording states the real
+  limitation (compound and prior running unknown); shift-point spread
+  no longer over-claims driver variance.
+
 ## [2.2.8] - 2026-07-20
 
 ### Changed

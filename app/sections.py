@@ -82,9 +82,17 @@ def _smooth(x: np.ndarray, frames: int) -> np.ndarray:
     return np.convolve(x, kernel, mode="same")
 
 
-def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
+def detect_sections(sd: SessionData,
+                    timed_windows: Optional[List[tuple]] = None
+                    ) -> Optional[Dict[str, Any]]:
     """Classify the whole session. Returns None when there is no steering
-    data worth splitting (parked sessions, tiny captures)."""
+    data worth splitting (parked sessions, tiny captures).
+
+    ``timed_windows`` — session-relative (start, end) spans of timed
+    laps/runs. Every instance is labelled ``timed`` true/false, and
+    representative samples are chosen from timed instances when any exist:
+    an 18 km/h staging shuffle must never be a category's "lowest" sample.
+    """
     n = sd.n
     if n < 300:
         return None
@@ -263,11 +271,25 @@ def detect_sections(sd: SessionData) -> Optional[Dict[str, Any]]:
             "susp_travel_max": round(float(np.max(susp_max_all[sl])), 2),
         })
 
+    def _in_timed(t_start: float) -> Optional[bool]:
+        if not timed_windows:
+            return None
+        return any(a - 1.0 <= t_start <= b + 1.0 for a, b in timed_windows)
+
     def _bucket(instances: List[Dict[str, Any]], cat: str) -> Dict[str, Any]:
         key, key_doc = RANK_METRIC[cat]
         clean = [dict((k, v) for k, v in i.items() if not k.startswith("_"))
                  for i in instances]
+        for i in clean:
+            timed = _in_timed(i.get("t_start", 0.0))
+            if timed is not None:
+                i["timed"] = timed
         out: Dict[str, Any] = {"count": len(clean), "ranked_by": key_doc}
+        if timed_windows:
+            timed_only = [i for i in clean if i.get("timed")]
+            if timed_only and len(timed_only) < len(clean):
+                out["outside_timed"] = len(clean) - len(timed_only)
+                clean = timed_only  # samples/medians from timed driving only
         if not clean:
             return out
         if len(clean) == 1:

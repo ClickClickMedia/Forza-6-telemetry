@@ -121,6 +121,25 @@ def test_two_instance_bucket_uses_lower_higher():
             assert "only" in b
 
 
+def test_timed_windows_gate_samples():
+    """Instances outside the timed windows are labelled and excluded from
+    representative samples — staging shuffles must never be a category's
+    'lowest'."""
+    sd = _crafted_session()
+    # Timed window covers only 15–45 s: the hairpin (20–24) and chicane
+    # (40–42.4) are inside; the trailing straight after 45 s is outside.
+    sec = detect_sections(sd, timed_windows=[(15.0, 45.0)])
+    hp = sec["hairpin"].get("only") or sec["hairpin"].get("highest")
+    assert hp.get("timed") is True
+    st = sec["straight"]
+    assert st.get("outside_timed", 0) >= 1
+    for key in ("only", "lower", "higher", "lowest", "median", "highest"):
+        inst = st.get(key)
+        if inst:
+            assert inst.get("timed") is True, \
+                "samples must come from timed running when any exist"
+
+
 def test_sections_none_for_tiny_session():
     sd = _synthetic_session(seconds=5.0)
     sd.columns["Speed"] = np.zeros(sd.n)

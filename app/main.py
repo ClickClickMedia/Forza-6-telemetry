@@ -664,11 +664,22 @@ async def session_tuning_md(session_id: int, download: int = 0,
             prev_setup = {"label": prev["label"],
                           "data": _json.loads(prev["data"] or "{}")}
     sd = _load_or_404(row)
+    saved_context = None
+    if mode == "quick" and setup is None and row.get("car_ordinal"):
+        # Quick copies inherit saved NON-tune context — the tool shouldn't
+        # pretend it doesn't know the discipline or assists it has stored.
+        latest = st.db.list_setups(row["car_ordinal"])
+        if latest:
+            ldata = _json.loads(latest[0]["data"] or "{}")
+            saved_context = {k: ldata.get(k) for k in
+                             ("discipline", "abs_assist", "tcs_assist",
+                              "gearbox", "car_text") if ldata.get(k)}
     md = build_markdown(sd, row, __version__, setup=setup,
                         lineage=_lineage_for(row),
                         variant=mode if mode in ("data", "quick") else "full",
                         verbose=(style != "compact"),
-                        prev_setup=prev_setup)
+                        prev_setup=prev_setup,
+                        saved_context=saved_context)
     headers = {}
     if download:
         headers["Content-Disposition"] = (
@@ -698,21 +709,44 @@ async def session_package(session_id: int) -> Response:
         if setups:
             setup = {"label": setups[0]["label"],
                      "data": json.loads(setups[0]["data"] or "{}")}
+    from .laps import lap_report
     md = build_markdown(sd, row, __version__, setup=setup,
                         lineage=_lineage_for(row))
-    sec = detect_sections(sd) or {}
+    rep = lap_report(sd)
+    windows = [(l["t_start"], l["t_end"]) for l in rep.get("laps", [])
+               if (l.get("lap") is not None or l.get("run"))
+               and l.get("t_start") is not None]
+    sec = detect_sections(sd, timed_windows=windows or None) or {}
+    sdata = (setup or {}).get("data") or {}
+    metadata = {k: row.get(k) for k in ("id", "name", "created_at",
+                                        "ended_at", "frame_count",
+                                        "car_ordinal", "car_name",
+                                        "car_class", "car_pi", "drivetrain",
+                                        "best_lap", "notes")}
+    metadata.update({
+        "discipline": sdata.get("discipline"),
+        "assists": {"abs": sdata.get("abs_assist"),
+                    "tcs": sdata.get("tcs_assist")},
+        "setup_source": "saved_latest" if setup else None,
+        "setup_snapshot_at_recording": False,
+        "timed_windows_s": windows,
+        "laps": [{"lap": l.get("lap"), "run": l.get("run"),
+                  "time_s": l.get("time_s"),
+                  "valid": bool(l.get("complete"))
+                  and not l.get("rewind_affected"),
+                  "rewind_affected": bool(l.get("rewind_affected")),
+                  "t_start": l.get("t_start"), "t_end": l.get("t_end")}
+                 for l in rep.get("laps", [])],
+        "section_evidence_scope": "entire recording (see timed_windows_s)",
+    })
     raw_path = settings.sessions_dir / (row.get("raw_path") or "")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("session-report.md", md)
         zf.writestr("laps.csv", build_laps_csv(sd))
         zf.writestr("sections.json", json.dumps(sec, indent=1))
-        zf.writestr("metadata.json", json.dumps(
-            {k: row.get(k) for k in ("id", "name", "created_at", "ended_at",
-                                     "frame_count", "car_ordinal",
-                                     "car_name", "car_class", "car_pi",
-                                     "drivetrain", "best_lap", "notes")},
-            indent=1, default=str))
+        zf.writestr("metadata.json", json.dumps(metadata, indent=1,
+                                                default=str))
         if setup:
             zf.writestr("setup.json", json.dumps(setup, indent=1))
         if raw_path.exists():
@@ -724,8 +758,11 @@ async def session_package(session_id: int) -> Response:
             "laps.csv           - one row per detected lap/run\n"
             "sections.json      - every classified corner section\n"
             "raw-telemetry.csv  - full wire capture (~60 Hz, all channels)\n"
-            "metadata.json      - session identity and results\n"
-            "setup.json         - latest saved tune for this car (if any)\n"))
+            "metadata.json      - session identity, lap validity, timed\n"
+            "                     windows, and setup provenance flags\n"
+            "setup.json         - LATEST saved tune for this car; it may\n"
+            "                     postdate the recording (not a snapshot\n"
+            "                     taken at recording time)\n"))
     return Response(
         buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition":
@@ -737,11 +774,17 @@ async def session_sections(session_id: int, download: int = 0) -> Response:
     """Machine-readable section evidence (hairpins/turns/sweepers/
     transfers/straights with every instance) — the structured companion
     to the Markdown report's representative samples."""
+    from .laps import lap_report
     from .sections import detect_sections
     row = _session_or_404(session_id)
     sd = _load_or_404(row)
-    sec = detect_sections(sd) or {}
+    rep = lap_report(sd)
+    windows = [(l["t_start"], l["t_end"]) for l in rep.get("laps", [])
+               if (l.get("lap") is not None or l.get("run"))
+               and l.get("t_start") is not None]
+    sec = detect_sections(sd, timed_windows=windows or None) or {}
     sec["session"] = {"id": session_id, "name": row.get("name")}
+    sec["timed_windows"] = windows
     headers = {}
     if download:
         headers["Content-Disposition"] = (

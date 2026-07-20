@@ -327,10 +327,20 @@ def test_position_gate_splits_circuit_into_laps():
 
 def test_position_gate_survives_mid_race_rewind_snap():
     """A rewind snaps DistanceTraveled and splits the event into two 'runs'
-    — position laps must bridge the split (the real failure this fixes)."""
+    — position laps must bridge the split, and the lap containing the
+    rewind must be flagged invalid for timing and excluded from best."""
     rep = lap_report(_circuit_session(loops=3.0, snap_at_frac=0.4))
     assert rep["lap_source"] == "position-gate"
-    assert len([l for l in rep["laps"] if l["complete"]]) == 3
+    complete = [l for l in rep["laps"] if l["complete"]]
+    assert len(complete) == 3
+    flagged = [l for l in complete if l.get("rewind_affected")]
+    assert len(flagged) == 1, "exactly the lap spanning the snap"
+    clean_times = [l["time_s"] for l in complete
+                   if not l.get("rewind_affected")]
+    assert rep["best_lap_s"] == min(clean_times)
+    # Every lap carries session-relative bounds for evidence attribution.
+    assert all(l.get("t_end", 0) > l.get("t_start", -1) >= 0
+               for l in complete)
 
 
 def test_position_laps_survive_zeroed_staging_and_spur_start():

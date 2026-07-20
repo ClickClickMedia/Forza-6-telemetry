@@ -369,6 +369,11 @@ def detect_position_laps(sd: SessionData,
     if len(crossings) < 3:  # need >= 2 complete loops to call it a circuit
         return []
 
+    # A lap spanning the gap between two detected runs contains a rewind
+    # (the snap that split the runs) — its elapsed time includes re-driven
+    # road and is invalid for performance comparison, though the telemetry
+    # remains real.
+    rewind_marks = [r["i1"] for r in runs[:-1]]
     laps: List[Dict[str, Any]] = []
     for (a, ta), (b, tb) in zip(zip(crossings, cross_t),
                                 zip(crossings[1:], cross_t[1:])):
@@ -377,6 +382,7 @@ def detect_position_laps(sd: SessionData,
             "time_s": round(tb - ta, 3),
             "route_m": round(float(route[b] - route[a]), 1),
             "complete": True,
+            "rewind_affected": any(a < m <= b for m in rewind_marks),
         })
     routes = [l["route_m"] for l in laps]
     if min(routes) < RUN_MIN_ROUTE_M or any(
@@ -494,6 +500,10 @@ def _lap_time(sd: SessionData, seg: Dict[str, Any]) -> Optional[float]:
 def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
     """Aggregates for one frame range [i0, i1)."""
     sl = slice(i0, i1)
+    t_all = sd.col("t_mono")
+    t_base = float(t_all[0]) if sd.n else 0.0
+    t_start = round(float(t_all[i0]) - t_base, 2) if i1 > i0 else 0.0
+    t_end = round(float(t_all[max(i1 - 1, i0)]) - t_base, 2) if i1 > i0 else 0.0
     dt = sd.dt()[sl]
     speed_ms = sd.col("Speed")[sl]
     speed_kmh = speed_ms * 3.6
@@ -840,6 +850,10 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
         "max_lat_g": round(float(np.max(lat_g)) if lat_g.size else 0.0, 2),
         "lat_g_p99": lat_p99,
         "lat_g_sustained": lat_sustained,
+        # Session-relative bounds: lets an analyst map this slice onto
+        # section-sample timestamps and the raw CSV.
+        "t_start": t_start,
+        "t_end": t_end,
     }
 
 
@@ -924,6 +938,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
                     "complete": pl["complete"],
                     "time_s": pl["time_s"],
                     "route_m": pl["route_m"],
+                    "rewind_affected": pl.get("rewind_affected", False),
                     **stats,
                 })
         elif runs:
@@ -952,6 +967,7 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
     complete_times = [
         l["time_s"] for l in laps
         if l["complete"] and l["time_s"] and l.get("lap") is not None
+        and not l.get("rewind_affected")
     ]
     if has_runs:
         complete_times = [l["time_s"] for l in laps if l.get("run") and l["time_s"]]
