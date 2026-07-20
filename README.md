@@ -87,10 +87,13 @@ get identical 60 Hz data; nobody has to choose.
 
 ---
 
-## Tune your car with AI
+## Read your data — and optionally hand it to an AI
 
-The point of collecting all this data: getting concrete setup changes out of
-it.
+The point of collecting all this data: understanding *where* you're losing
+time, and getting concrete setup changes out of it. **The tool does the
+first part — a readable evidence report. An AI is an optional second step
+for the second part; the tool itself never tunes your car or invents
+setting values.**
 
 1. **Drive.** Recording is **manual by default** — press **● Record** on
    the Live page when you want data (it still auto-stops after 30 s
@@ -99,22 +102,24 @@ it.
    live, ends with the event) or *Any driving*. **Free-roam time attacks
    are fully supported** — the app recognises the staged start-line
    signature and times your runs.
-2. On the Analysis page, pick your intent:
+2. **Read the report** on the Analysis page — laps, corner-by-corner
+   section evidence, balance, tyres, traction, suspension, gearing. That's
+   often enough on its own to see where the car is losing time.
+   ([here's a real one](docs/example-report.md).)
+3. **Optionally, copy it into an AI** to help interpret. Pick your intent:
    - **⚡ Quick analysis** — one tap, no setup needed. Copies the full
-     evidence packet (laps, section evidence, balance, tyres, traction,
-     suspension, gearing) with a prompt that asks the AI to locate the
-     problem and name setup *areas* to investigate. Perfect for "why was
-     I slow?" after a random race.
-   - **Engineering analysis** — opens your saved tune (stored per car,
-     last version pre-loaded), lets you update the one or two values you
-     just changed in-game, and copies the report with your setup, the
-     **changes since the previous revision** ("the variables being
-     tested"), discipline and assists.
-   Both confirm with *"Copied! Paste into Claude or ChatGPT for
-   analysis"*.
-3. **The AI proposes changes** within Forza's tuning screen: pressures,
-   gearing, alignment, anti-roll bars, springs, damping, aero, diff, brakes.
-4. Apply the tune, drive again, and **Compare** the two sessions.
+     evidence packet with a prompt asking the AI to locate the problem and
+     name setup *areas* to investigate. Good for "why was I slow?" after a
+     random race.
+   - **Engineering brief** — includes your saved tune (stored per car,
+     last version pre-loaded, edit the one or two values you changed) plus
+     the **changes since the previous revision**, discipline and assists.
+   This is a **separate step you choose to do** — the copy lands on your
+   clipboard, and *you* paste it into Claude or ChatGPT. No AI runs inside
+   the tool. Whatever an AI then suggests is on you to judge; it can spit
+   nonsense values, so the report keeps the numbers and the decision yours.
+4. **Apply any changes yourself**, drive again, and **Compare** — the tool
+   confirms whether the route matched and shows the before/after.
 
 ### The loop in action
 
@@ -188,8 +193,9 @@ setup values you fill into the report.
   a drift-aware understeer index, per-axle slide times, wheelspin and
   brake-lock events, suspension travel and bottom-outs, shift RPM and
   time-on-limiter.
-- **AI tuning export** — one-tap Markdown report for Claude/ChatGPT, plus
-  per-lap CSV and raw CSV. Optional direct Claude connection over MCP
+- **Readable evidence report** — one-tap Markdown you can read yourself, or
+  optionally paste into Claude/ChatGPT to help interpret; plus per-lap CSV
+  and raw CSV. Optional direct Claude connection over MCP
   ([docs/CLAUDE-MCP.md](docs/CLAUDE-MCP.md)).
 - **Analysis & comparison** — verdict cards, route trace coloured by speed
   or rear slip, gear usage, event detection; two-session channel overlay.
@@ -270,7 +276,7 @@ this cross-check live; if it ever fails on your setup,
 | DELETE | `/api/sessions/{id}` | Delete session + raw file |
 | GET | `/api/sessions/{id}/analysis` | Full analysis |
 | GET | `/api/sessions/{id}/laps` | Lap breakdown + tuning aggregates + verdicts |
-| GET | `/api/sessions/{id}/tuning.md` | AI-ready tuning report (`?download=1` to save) |
+| GET | `/api/sessions/{id}/tuning.md` | Readable evidence report (`?download=1` to save) |
 | GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |
 | GET | `/api/sessions/{id}/route?colour_by=speed\|rear_slip` | Route trace |
 | GET | `/api/sessions/{id}/download.csv` | Raw frames CSV |
