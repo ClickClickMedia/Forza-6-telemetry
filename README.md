@@ -193,10 +193,24 @@ setup values you fill into the report.
   a drift-aware understeer index, per-axle slide times, wheelspin and
   brake-lock events, suspension travel and bottom-outs, shift RPM and
   time-on-limiter.
-- **Readable evidence report** — one-tap Markdown you can read yourself, or
-  optionally paste into Claude/ChatGPT to help interpret; plus per-lap CSV
-  and raw CSV. Optional direct Claude connection over MCP
-  ([docs/CLAUDE-MCP.md](docs/CLAUDE-MCP.md)).
+- **Corner-by-corner section evidence** — every cornering event classified
+  by shape (hairpin, turn, sweeper, chicane/transfer, straight, launch)
+  with entry/min/exit speeds, slip, throttle-reapplication and wheelspin
+  per section, and representative samples timestamped so you can find them
+  in the data. Session-wide averages hide where the car actually struggles;
+  this doesn't.
+- **Readable evidence report** — a Markdown report you read yourself
+  ([example](docs/example-report.md)), or optionally paste into an AI. Copy
+  it four ways: **Quick analysis** (no setup), **Engineering brief** (with
+  your saved tune + changes since last revision), **Copy evidence** (no
+  prompt), or **Export files** — report, per-lap CSV, `sections.json`, raw
+  CSV, or a complete `.zip` package. Optional direct Claude connection over
+  MCP ([docs/CLAUDE-MCP.md](docs/CLAUDE-MCP.md)).
+- **Honest before/after comparison** — each session is compared against the
+  last run of the same car, but **only when the tool can confirm the route
+  matches** (timed-loop length within 5%); otherwise it says so rather than
+  showing a misleading delta. Lap validity (valid / partial / rewind-
+  affected) is flagged, and rewind-affected laps are kept out of your best.
 - **Analysis & comparison** — verdict cards, route trace coloured by speed
   or rear slip, gear usage, event detection; two-session channel overlay.
 - **Solid plumbing** — asyncio UDP receiver that never crashes on malformed
@@ -276,10 +290,13 @@ this cross-check live; if it ever fails on your setup,
 | DELETE | `/api/sessions/{id}` | Delete session + raw file |
 | GET | `/api/sessions/{id}/analysis` | Full analysis |
 | GET | `/api/sessions/{id}/laps` | Lap breakdown + tuning aggregates + verdicts |
-| GET | `/api/sessions/{id}/tuning.md` | Readable evidence report (`?download=1` to save) |
+| GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data`, `?style=compact`, `?setup_id=N`, `?download=1`) |
+| GET | `/api/sessions/{id}/sections.json` | Structured corner-section evidence |
+| GET | `/api/sessions/{id}/package.zip` | Full session bundle (report, CSVs, sections, metadata, setup) |
 | GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |
 | GET | `/api/sessions/{id}/route?colour_by=speed\|rear_slip` | Route trace |
 | GET | `/api/sessions/{id}/download.csv` | Raw frames CSV |
+| DELETE | `/api/sessions` | Delete all sessions (keeps cars/setups/settings) |
 | POST | `/api/recording/start` \| `/stop` \| `/marker` | Manual recording control |
 | GET | `/api/compare?a=ID&b=ID&colour_by=...` | Compare two sessions |
 | GET | `/api/debug/last` \| `/api/debug/spec` | Packet debug |
