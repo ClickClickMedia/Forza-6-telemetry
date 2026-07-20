@@ -44,6 +44,11 @@ Treat wet, night or rewind-affected running separately where declared.
 Separate driver observations from setup hypotheses — recommend a setup
 change only when the telemetry supports it independently of likely
 driver variation.
+When several tune settings changed at once, a faster result proves the
+WHOLE tune was faster, not which setting caused it. Keep three things
+separate: the measured outcome, the evidence-consistent explanation, and
+any single-setting causal claim (which stays a hypothesis unless the
+sessions isolate that one variable).
 "No setup change recommended" is a valid answer when evidence is weak,
 the clock is improving, or driver variance dominates — prefer "collect
 more evidence" over speculative tuning.
@@ -451,12 +456,16 @@ def _lineage_section(add, lineage: List[Dict[str, Any]],
                 bits.append(f"USI {pu:+.3f} → {cu:+.3f}")
             ps, cs = s.get("spin_total_s"), current.get("spin_total_s")
             if ps is not None and cs is not None:
-                bits.append(f"wheelspin {ps:.1f} → {cs:.1f} s")
+                bits.append(f"wheelspin {ps:.1f} → {cs:.1f} s *(whole-session "
+                            f"totals — sensitive to differing non-timed "
+                            f"driving between runs)*")
             if bits:
-                add(f"**Since last session** ({prev.get('name', '?')}, "
-                    f"timed-loop length matches within 5%): "
-                    + " · ".join(bits)
-                    + " *(conditions not verifiable — confirm)*")
+                add(f"**Since last session** ({prev.get('name', '?')}): "
+                    + " · ".join(bits))
+                add(f"- Comparison basis: route match **confirmed** (timed-"
+                    f"loop length within 5%); build, tune and conditions "
+                    f"**not verifiable from telemetry** — confirm before "
+                    f"attributing the change to a specific cause.")
                 add("")
         else:
             add(f"Previous session found ({prev.get('name', '?')}), but no "
@@ -569,9 +578,10 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         if peaks.get("pct_at_peak_power") is not None:
             add(f"- Time at ≥90% of that observed peak: "
                 f"**{peaks['pct_at_peak_power']:.1f}%** of moving time "
-                f"*(utilisation relative to this session's own peak — low "
-                f"values suggest gearing keeps the engine out of its best "
-                f"range, or the track never lets it stretch)*")
+                f"*(utilisation relative to this session's own peak — read "
+                f"against route type: a tight touge route naturally spends "
+                f"far less time near peak power than a high-speed circuit, "
+                f"so a low value is not automatically a gearing problem)*")
     add("")
 
     # The same telemetry means different things on circuit, touge or dirt
@@ -754,6 +764,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                  "mostly on straights" if straight > turning * 1.5 else
                  "split between corners and straights")
         add(f"- Wheelspin pattern *(estimated)*: **{which}, {where}**")
+        ins, outs = trac.get("wheelspin_inside_s", 0), trac.get("wheelspin_outside_s", 0)
+        if (ins or outs) and single > 0:
+            side = ("mostly the **inside** driven wheel" if ins > outs * 1.5
+                    else "mostly the **outside** driven wheel"
+                    if outs > ins * 1.5 else "split inside/outside")
+            add(f"- Single-wheel flare while turning is {side} "
+                f"(inside {ins:.1f} s / outside {outs:.1f} s) — inside-wheel "
+                f"flare on exit is the classic more-diff-accel-lock signal; "
+                f"outside or both-wheel points at power vs tyre instead")
         add(f"- Wheelspin split (mutually exclusive; buckets sum to the total): "
             + " · ".join(f"{w} only {s:.1f} s" for w, s in byw.items())
             + f" · multiple driven wheels {multi:.1f} s — "
@@ -897,17 +916,24 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 label = str(seq)
                 extra = (f" · {l['route_m'] / 1000:.2f} km"
                          if l.get("route_m") else "")
+            partial = not l.get("complete")
             if l.get("rewind_affected"):
                 validity = "rewind-affected"
                 any_rewind = True
-            elif not l.get("complete"):
+            elif partial:
                 validity = "partial"
             else:
                 validity = "valid"
+            # A partial lap's duration is shorter than a full lap, so it can
+            # read as "fastest" — never present it as a comparable lap time.
+            time_cell = (_fmt_lap_time(l.get("time_s")) + extra
+                         if not partial
+                         else f"incomplete ({_fmt_lap_time(l.get('time_s'))} "
+                              f"elapsed — not a lap time){extra}")
             rows.append([
                 label,
                 validity,
-                _fmt_lap_time(l.get("time_s")) + extra,
+                time_cell,
                 f"{l['speed']['avg_kmh']:.0f}",
                 f"{l['speed']['max_kmh']:.0f}",
                 f"{l['inputs']['pct_full_throttle']:.0f}",
@@ -930,8 +956,16 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             add("")
         complete = [l for l in rep["laps"]
                     if l.get("complete") and l.get("time_s")
-                    and l.get("lap") is not None]
-        if len(complete) >= 3:
+                    and l.get("lap") is not None
+                    and not l.get("rewind_affected")]
+        if len(complete) == 2:
+            spread = abs(complete[0]["time_s"] - complete[1]["time_s"])
+            add(f"- Repeatability *(driver signal)*: two valid laps "
+                f"{spread:.3f} s apart — a tight spread means a session-to-"
+                f"session gain is a repeatable result, not a single-lap "
+                f"outlier.")
+            add("")
+        elif len(complete) >= 3:
             times = sorted(l["time_s"] for l in complete)
             spread = times[-1] - times[0]
             median = times[len(times) // 2]

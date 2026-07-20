@@ -122,6 +122,13 @@ def test_setup_supplied_three_states():
     assert "Setup supplied: no" in md4
 
 
+def test_engineering_prompt_has_causality_guardrail():
+    sd = _synthetic_session(seconds=30.0)
+    md = build_markdown(sd, META, "2.3.2")
+    assert "several tune settings changed at once" in md
+    assert "not which setting caused it" in md
+
+
 def test_section_scope_statement():
     """Section evidence spans the whole recording; when timed running is
     a fraction of it, the report must say so."""

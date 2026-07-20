@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.3.2] - 2026-07-20
+
+### Added — comparison-quality & causality round (blind-context feedback)
+- **Inside vs outside driven-wheel flare**: single-wheel wheelspin while
+  turning is now split by whether the spinning wheel is on the inside or
+  outside of the corner (from steer direction) — inside-wheel flare on
+  exit is the classic more-diff-accel-lock signal, and it makes diff
+  advice defensible. On real captures it's a strong, clean signal
+  (Ford GT: 50 s inside vs 3 s outside).
+- **Repeatability line for two valid laps**: a tight two-lap spread is
+  reported as evidence a session-to-session gain is repeatable, not a
+  single-lap outlier (previously needed 3+ laps).
+- **Causality guardrail** in the engineering prompt: when several tune
+  settings changed at once, a faster result proves the whole tune was
+  faster, not which setting caused it — measured outcome, explanation and
+  single-setting causal claims are kept separate.
+
+### Fixed
+- **Partial laps no longer look like the fastest lap**: an incomplete
+  lap's shorter elapsed time is labelled "incomplete (… elapsed — not a
+  lap time)" instead of sitting in the Time column as if comparable.
+- **Since-last-session deltas are honest about their basis**: wheelspin
+  is flagged as a whole-session total (sensitive to non-timed driving),
+  and a comparison-basis line states route match is confirmed while
+  build/tune/conditions are not verifiable from telemetry.
+- Power-utilisation reads against route type — a low value on a tight
+  touge route is no longer implied to be a gearing problem.
+
+### Changed
+- "Engineering analysis" button → **"Engineering brief"**, with a line
+  under the export bar: *No AI runs inside the tool — paste it into an AI
+  yourself if you want interpretation, or just read it.*
+
 ## [2.3.1] - 2026-07-20
 
 ### Fixed

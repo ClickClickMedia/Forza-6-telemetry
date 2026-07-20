@@ -397,6 +397,27 @@ def test_point_to_point_run_gets_no_position_laps():
     assert rep["has_runs"] and not rep["has_laps"]
 
 
+def test_inside_wheel_flare_from_steer_direction():
+    """Single-wheel flare on the inside wheel (side matches steer
+    direction) is the diff-accel-lock signal — it must be told apart from
+    outside-wheel flare."""
+    sd = _synthetic_session(seconds=30.0, hz=30.0)
+    n = sd.n
+    sd.columns["DrivetrainType"] = np.ones(n)   # RWD
+    sd.columns["CarOrdinal"] = np.full(n, 100.0)
+    sd.columns["Accel"] = np.full(n, 255.0)
+    sd.columns["Speed"] = np.full(n, 30.0)
+    sd.columns["HandBrake"] = np.zeros(n)
+    # Steering hard left the whole time → inside = left wheels (RL).
+    sd.columns["Steer"] = np.full(n, -100.0)
+    for w in ("FrontLeft", "FrontRight", "RearRight"):
+        sd.columns[f"TireSlipRatio{w}"] = np.zeros(n)
+    sd.columns["TireSlipRatioRearLeft"] = np.full(n, 1.5)  # inside spins
+    trac = lap_report(sd)["session"]["traction"]
+    assert trac["wheelspin_inside_s"] > trac["wheelspin_outside_s"]
+    assert trac["wheelspin_inside_s"] > 5.0
+
+
 def test_observed_peaks_ignore_partial_throttle():
     sd = _synthetic_session(seconds=20.0, hz=30.0)
     # Zero throttle everywhere -> no valid pulls -> peaks are None.

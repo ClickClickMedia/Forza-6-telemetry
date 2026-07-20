@@ -632,6 +632,25 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
     spin_turning = round(float(np.sum(dt[any_spin & turning])), 1)
     spin_straight = round(float(np.sum(dt[any_spin & ~turning])), 1)
 
+    # Inside vs outside driven-wheel single-wheel flare — THE diff-tuning
+    # signal. A wheel is "inside" when its side matches the steer
+    # direction (left wheels while steering left, right wheels while
+    # steering right). Inside-wheel flare on exit argues for more diff
+    # acceleration lock; outside/both-wheel argues power vs tyre instead.
+    single_turn = (n_spinning == 1) & turning
+    left_wheels = {0, 2}
+    spin_inside = spin_outside = 0.0
+    for i in driven_idx:
+        side_is_left = i in left_wheels
+        inside = single_turn & wheel_spin_masks[i] & (
+            (steer < 0) if side_is_left else (steer > 0))
+        outside = single_turn & wheel_spin_masks[i] & ~(
+            (steer < 0) if side_is_left else (steer > 0))
+        spin_inside += float(np.sum(dt[inside]))
+        spin_outside += float(np.sum(dt[outside]))
+    spin_inside = round(spin_inside, 1)
+    spin_outside = round(spin_outside, 1)
+
     # Brake lock via WHEEL-SPEED DEFICIT — the honest detector. Forza's
     # normalized slip ratio crosses -0.5 during ordinary hard braking with
     # no lockup (verified: a session with 5-6 s of slip<-0.5 showed 0.0 s
@@ -804,6 +823,8 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "wheelspin_multi_s": spin_multi,
             "wheelspin_turning_s": spin_turning,
             "wheelspin_straight_s": spin_straight,
+            "wheelspin_inside_s": spin_inside,
+            "wheelspin_outside_s": spin_outside,
             "brake_lock_events": lock_front_g["events"] + lock_rear_g["events"],
             "brake_lock_front_events": lock_front_g["events"],
             "brake_lock_front_s": lock_front_g["total_s"],
