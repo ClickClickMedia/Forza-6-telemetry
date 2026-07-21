@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-07-21
+
+### Added — experiment mode (opt-in)
+- **Design-an-experiment prompt** on the engineering brief: a "Report
+  goal" toggle (Tune advice / Design an experiment) in the setup sheet.
+  Experiment mode deliberately flips the cautious framing — it asks the AI
+  to design **one decisive, reversible, single-variable test** pushed to a
+  near-extreme to maximise what the next run teaches, with a falsifiable
+  prediction and a pass/fail rule, instead of nudging several systems at
+  once. Every Forza change is reversible, so a bold test costs one lap you
+  can undo — worth it for the knowledge.
+  - If the report shows a change since the previous setup, the prompt first
+    asks the AI to evaluate that as a completed experiment (supported /
+    rejected / inconclusive) against the matched-section evidence before
+    proposing the next one.
+  - The default tune-advice, quick and copy-evidence prompts are
+    **unchanged** — the honest, cautious framing stays the default for the
+    "why am I slow?" case; boldness is always a deliberate choice.
+
 ## [2.3.2] - 2026-07-20
 
 ### Added — comparison-quality & causality round (blind-context feedback)

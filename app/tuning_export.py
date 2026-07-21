@@ -55,6 +55,42 @@ more evidence" over speculative tuning.
 Never invent data this export does not contain.
 """
 
+EXPERIMENT_PROMPT = """\
+Design ONE decisive, reversible tuning experiment that maximises what the
+next run will teach — using the evidence, setup and any changes-since-last
+above. This is deliberately NOT a request for a cautious final tune; every
+Forza tune change is fully reversible, so the cost of a bold test is one
+lap you can undo.
+
+Choose exactly ONE experimental variable — one slider, one coherent
+balance axis (e.g. front-vs-rear ARB split while holding total roll
+stiffness roughly constant), or one subsystem state (e.g. min vs max aero
+balance). Move it far enough to produce an unmistakable telemetry
+response: prefer a valid extreme or near-extreme where the car stays
+driveable. Do NOT propose minor 5–10% nudges unless the slider's whole
+range is tiny. Keep every unrelated setting unchanged.
+
+A perfect clean lap is not required — repeated comparable corners are
+enough; exclude only local incident windows. Do not ask for more evidence
+when the section evidence already contains repeated examples of the
+behaviour in question.
+
+Make it falsifiable. State, concisely:
+1. Strongest current hypothesis.
+2. The single experimental variable, its current value and exact test value.
+3. Everything that must stay unchanged.
+4. Expected telemetry response if the hypothesis is correct.
+5. Expected response if it is wrong.
+6. The metrics and corner phases that decide it, and a clear pass/fail rule.
+7. What to do after: keep the extreme, revert, or interpolate between
+   baseline and extreme (roughly where).
+
+If the report shows a change since the previous setup, first evaluate that
+as a completed experiment against a pass/fail rule (supported / rejected /
+inconclusive, with the matched-section evidence) before proposing the next
+one. Never invent data this export does not contain.
+"""
+
 QUICK_PROMPT = """\
 Analyse this telemetry-only report (no setup was supplied).
 
@@ -552,6 +588,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
 
     data_only = variant == "data" and setup is None
     quick = variant == "quick"
+    experiment = variant == "experiment"
 
     add("## Car")
     add("")
@@ -995,9 +1032,13 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "with your stated confidence. Never invent specific setting "
             "values.")
         add("")
-    elif variant == "full":
+    elif variant in ("full", "experiment"):
         add("## My current setup (fill in before asking the AI)")
         add("")
+        if experiment:
+            add("*(An experiment needs the current values to move one from — "
+                "fill in at least the subsystem you want to test.)*")
+            add("")
         add("```")
         add("Tyre pressure  F: ___    R: ___   (bar or psi, as the game shows)")
         add("Gearing        final: ___   (per-gear if custom)")
@@ -1030,7 +1071,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 f"choices (engine/aspiration swaps, tyre compound, aero), and "
                 f"use my answer as the car identity throughout.")
             add("")
-        add(QUICK_PROMPT if quick else AI_PROMPT)
+        add(EXPERIMENT_PROMPT if experiment
+            else QUICK_PROMPT if quick else AI_PROMPT)
     else:
         add("*This export contains evidence only and makes no request for "
             "analysis.*")

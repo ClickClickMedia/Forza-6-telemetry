@@ -129,6 +129,24 @@ def test_engineering_prompt_has_causality_guardrail():
     assert "not which setting caused it" in md
 
 
+def test_experiment_mode_prompts_bold_single_variable():
+    """Experiment mode is opt-in and deliberately flips the caution: one
+    variable, pushed to a near-extreme, falsifiable — NOT a cautious tune."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v1", "data": {"arb_f": "26", "arb_r": "50"}}
+    md = build_markdown(sd, META, "2.4.0", setup=setup, variant="experiment")
+    assert "decisive, reversible tuning experiment" in md
+    assert "exactly ONE experimental variable" in md
+    assert "falsifiable" in md
+    assert "pass/fail rule" in md
+    # It must NOT carry the cautious default prompt's timid lines.
+    assert "smallest tune change" not in md
+    # The default engineering export keeps its cautious framing untouched.
+    default = build_markdown(sd, META, "2.4.0", setup=setup)
+    assert "smallest tune change" in default
+    assert "decisive, reversible tuning experiment" not in default
+
+
 def test_section_scope_statement():
     """Section evidence spans the whole recording; when timed running is
     a fraction of it, the report must say so."""
