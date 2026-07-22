@@ -1,3 +1,3 @@
 """Forza Horizon 6 telemetry collector and dashboard."""
 
-__version__ = "2.4.1"
+__version__ = "2.5.0"

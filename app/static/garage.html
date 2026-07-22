@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FH6 Telemetry — Garage</title>
+  <meta name="theme-color" content="#16130F" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <div class="spread" style="margin-bottom:4px;">
+      <h1 style="margin:0;">Garage</h1>
+      <button id="btnRefresh" class="btn small ghost">Refresh</button>
+    </div>
+    <p class="loadnote" style="margin:0 0 12px;">Every car you've driven or
+      named — sessions, saved tune versions and your best lap per car.</p>
+
+    <div id="empty" class="notice hidden">
+      No cars yet. Drive a car (or name one on the Analysis page) and it
+      appears here.
+    </div>
+
+    <div id="list" class="session-list" aria-live="polite"></div>
+
+    <footer class="foot">Aggregated from your local sessions and saved tunes ·
+      nothing leaves this machine</footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+  (function () {
+    const { api, esc, fmt, fmtLapTime, fmtDate, toast } = FH;
+    FH.shell("garage");
+
+    const DRIVE = { 0: "FWD", 1: "RWD", 2: "AWD" };
+    const CLS = { 0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "S3", 7: "X" };
+    const list = document.getElementById("list");
+    const empty = document.getElementById("empty");
+
+    function relDay(iso) {
+      if (!iso) return "—";
+      const d = (Date.now() - new Date(iso).getTime()) / 86400000;
+      if (!isFinite(d) || d < 0) return "today";
+      if (d < 1) return "today";
+      if (d < 2) return "yesterday";
+      if (d < 30) return Math.round(d) + " days ago";
+      return fmtDate(iso);
+    }
+
+    function chips(c) {
+      const out = [];
+      if (c.car_pi != null) {
+        const cls = CLS[c.car_class] != null ? CLS[c.car_class] : "?";
+        out.push('<span class="pill amber">' + esc(cls + " " + c.car_pi) + "</span>");
+      }
+      if (c.drivetrain != null) out.push('<span class="pill">' + esc(DRIVE[c.drivetrain] || c.drivetrain) + "</span>");
+      out.push('<span class="pill">#' + esc(c.ordinal) + "</span>");
+      return out.join("");
+    }
+
+    function card(c) {
+      const name = c.car_name || ("Unknown car — ordinal " + c.ordinal);
+      const tunes = c.tune_versions
+        ? c.tune_versions + " tune" + (c.tune_versions === 1 ? "" : "s")
+        : "no saved tune";
+      const sessions = c.session_count + " session" + (c.session_count === 1 ? "" : "s");
+      // A car with sessions links into Analysis (the per-car workspace);
+      // a name-only car (tuned but not yet driven) shows without the link.
+      const actions = c.session_count
+        ? '<div class="actions"><a class="btn small primary" href="/sessions">View sessions</a></div>'
+        : "";
+      return '<article class="card session-card">' +
+        '<div class="title-row">' +
+          '<span class="name">' + esc(name) + "</span>" +
+          '<span class="pill amber">' + esc(fmtLapTime(c.best_lap)) + "</span>" +
+        "</div>" +
+        '<div class="chips">' + chips(c) + "</div>" +
+        '<div class="lapline">' +
+          "<span>" + esc(sessions) + "</span>" +
+          "<span>" + esc(tunes) + "</span>" +
+          "<span>last driven " + esc(relDay(c.last_driven)) + "</span>" +
+        "</div>" +
+        actions +
+      "</article>";
+    }
+
+    async function load() {
+      try {
+        const r = await api("/api/garage");
+        const cars = r.cars || [];
+        empty.classList.toggle("hidden", cars.length > 0);
+        list.innerHTML = cars.map(card).join("");
+      } catch (e) {
+        toast("Failed to load garage: " + e.message);
+      }
+    }
+    document.getElementById("btnRefresh").addEventListener("click", load);
+    load();
+  })();
+  </script>
+</body>
+</html>

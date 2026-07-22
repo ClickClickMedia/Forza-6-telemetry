@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-07-22
+
+### Fixed — time-metric inflation (found via a raw-data forensic review)
+- **Every time total was inflated ~6% by duplicate timestamps.** On
+  Windows the monotonic clock resolution (~16 ms ≈ one 60 Hz frame)
+  stamps several frames at the same instant, so a real capture has ~6%
+  duplicate-timestamp frames. `dt()` replaced those zero-deltas with the
+  median frame length, adding phantom time. Now duplicate-instant frames
+  contribute zero elapsed time and `sum(dt)` equals the true span exactly.
+  On the reference BMW session this corrects **duration 337→318 s,
+  distance 13.61→12.8 km**, and trims every "seconds of X" metric
+  (wheelspin, slide time, braking) to its true value. No weighted-average
+  regressions (redundant same-instant frames simply get no weight).
+- **`sections.json` wording corrected.** The report said the export was
+  the "full instance list"; it actually carries per-category counts,
+  medians and representative samples. Wording now matches what the file
+  contains (exporting every instance is a tracked enhancement, issue #6).
+
+### Added
+- **Garage** — a new tab listing every car you've driven or named, with
+  session count, saved tune versions, best lap and when last driven,
+  aggregated from your local sessions and tunes (no new storage, nothing
+  leaves the machine).
+
 ## [2.4.1] - 2026-07-22
 
 ### Changed — tune-advice prompt calibration

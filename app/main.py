@@ -447,6 +447,64 @@ async def get_session(session_id: int) -> Dict[str, Any]:
     return row
 
 
+def _garage_aggregate(sessions, name_for, count_for, extra_named=None):
+    """Pure aggregation for the garage view: one entry per car_ordinal.
+
+    ``sessions`` newest-first (as list_sessions returns). ``name_for`` and
+    ``count_for`` are callables ordinal -> name / tune-version count.
+    ``extra_named`` maps ordinal -> name for cars that are named or tuned
+    but have no sessions yet (they still belong in the garage).
+    """
+    by_ordinal: Dict[int, Dict[str, Any]] = {}
+    for s in sessions:
+        ordv = s.get("car_ordinal")
+        if not ordv:  # skip menu / zero-identity sessions
+            continue
+        g = by_ordinal.get(ordv)
+        if g is None:  # first (newest) session sets identity fields
+            g = by_ordinal[ordv] = {
+                "ordinal": ordv, "car_name": name_for(ordv),
+                "car_class": s.get("car_class"), "car_pi": s.get("car_pi"),
+                "drivetrain": s.get("drivetrain"),
+                "cylinders": s.get("cylinders"),
+                "session_count": 0, "best_lap": None,
+                "last_driven": s.get("created_at"),
+                "first_driven": s.get("created_at"),
+            }
+        g["session_count"] += 1
+        bl = s.get("best_lap")
+        if bl and (g["best_lap"] is None or bl < g["best_lap"]):
+            g["best_lap"] = bl
+        created = s.get("created_at")
+        if created:
+            if not g["last_driven"] or created > g["last_driven"]:
+                g["last_driven"] = created
+            if not g["first_driven"] or created < g["first_driven"]:
+                g["first_driven"] = created
+    for ordv, name in (extra_named or {}).items():
+        by_ordinal.setdefault(ordv, {
+            "ordinal": ordv, "car_name": name, "car_class": None,
+            "car_pi": None, "drivetrain": None, "cylinders": None,
+            "session_count": 0, "best_lap": None,
+            "last_driven": None, "first_driven": None,
+        })
+    for ordv, g in by_ordinal.items():
+        g["tune_versions"] = count_for(ordv)
+    return sorted(by_ordinal.values(),
+                  key=lambda g: (g["last_driven"] or ""), reverse=True)
+
+
+@app.get("/api/garage")
+async def garage() -> Dict[str, Any]:
+    """The player's cars: one entry per car they've driven or named, with
+    session count, saved tune versions, best lap and when last driven.
+    Aggregated from the sessions, cars and setups tables — no new storage."""
+    st = _state()
+    return {"cars": _garage_aggregate(
+        st.db.list_sessions(), _resolve_car_name, st.db.count_setups,
+        extra_named=st.db.car_names())}
+
+
 # ---------------------------------------------------------------------------
 # Saved tune setups (user-entered tuning-screen values, versioned per car)
 # ---------------------------------------------------------------------------
@@ -909,6 +967,11 @@ async def page_index() -> HTMLResponse:
 @app.get("/sessions", response_class=HTMLResponse)
 async def page_sessions() -> HTMLResponse:
     return _page("sessions.html")
+
+
+@app.get("/garage", response_class=HTMLResponse)
+async def page_garage() -> HTMLResponse:
+    return _page("garage.html")
 
 
 @app.get("/analysis", response_class=HTMLResponse)

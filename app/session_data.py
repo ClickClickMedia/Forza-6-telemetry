@@ -40,19 +40,30 @@ class SessionData:
         return self.columns["t_mono"]
 
     def dt(self) -> np.ndarray:
-        """Per-frame time deltas (seconds), same length as data (first = median).
+        """Per-frame time deltas (seconds), same length as data.
 
-        Never returns an all-zero array (which would make weighted averages
-        divide by zero); a degenerate single-frame session yields ``[1.0]``.
+        Invariant: ``sum(dt) == t_mono[-1] - t_mono[0]`` (the true elapsed
+        span). Frames whose timestamp does not advance contribute ZERO
+        elapsed time. On Windows the monotonic clock resolution (~16 ms ≈
+        one 60 Hz frame) stamps several frames at the same instant, so a
+        real capture has ~6% duplicate timestamps; the previous version
+        replaced those zero-deltas with the median frame length, which
+        added phantom time and inflated EVERY time total (duration,
+        distance, slide/wheelspin/braking seconds) by that ~6%. The
+        duplicate-instant frames simply get no weight in weighted averages,
+        which is correct — their time is carried by the following larger
+        gap. A capture with no time advance at all falls back to uniform
+        weights so weighted averages never divide by zero.
         """
         t = self.columns["t_mono"]
-        if len(t) < 2:
-            return np.ones(len(t))
+        n = len(t)
+        if n < 2:
+            return np.ones(n)
         d = np.diff(t, prepend=t[0])
-        # Guard against clock glitches / negative deltas.
-        med = float(np.median(d[1:])) if len(d) > 1 else 0.0
-        d[d <= 0] = med if med > 0 else 0.0
-        d[0] = med if med > 0 else 0.0
+        d[d < 0] = 0.0   # clock glitch: never negative elapsed time
+        d[0] = 0.0       # first frame: no prior frame, no elapsed time
+        if float(d.sum()) <= 0.0:  # degenerate (no timestamp advance)
+            return np.full(n, 1.0 / n)
         return d
 
 

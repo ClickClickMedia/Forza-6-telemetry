@@ -483,6 +483,8 @@
       icon: '<circle cx="12" cy="13" r="8.5"/><path d="M12 13l4.2-4.2"/><path d="M5.5 16.5h-1M19.5 16.5h-1"/>' },
     { href: "/sessions", key: "sessions", label: "Sessions",
       icon: '<path d="M4 6h16M4 12h16M4 18h9"/>' },
+    { href: "/garage", key: "garage", label: "Garage",
+      icon: '<path d="M3 11l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M8 19v-5h8v5"/>' },
     { href: "/analysis", key: "analysis", label: "Analysis",
       icon: '<path d="M4 5v14h16"/><path d="M7 15l3.5-5 3 3L18 7"/>' },
     { href: "/compare", key: "compare", label: "Compare",

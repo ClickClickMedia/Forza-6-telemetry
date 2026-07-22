@@ -409,11 +409,13 @@ def _section_evidence(add, sections: Dict[str, Any],
             "**mutually exclusive**: a transfer's two component corners count "
             "only under transfer, and one event spans contiguous "
             "same-direction cornering, so it may cover linked bends. `start` "
-            "is session-relative mm:ss. Full instance list: the sections.json "
-            "export.)*")
+            "is session-relative mm:ss. The sections.json export carries "
+            "these same per-category counts, medians and representative "
+            "samples in machine-readable form.)*")
     else:
         add("*(Mutually exclusive categories; `start` is session-relative "
-            "mm:ss; full instance list in sections.json.)*")
+            "mm:ss; sections.json has the same counts/medians/samples "
+            "machine-readable.)*")
     add("")
     th = sections.get("thresholds", {})
     display = {"hairpin": "Hairpin / switchback"}
