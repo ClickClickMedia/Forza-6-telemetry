@@ -12,8 +12,9 @@
 <body>
   <main class="page">
     <div class="spread" style="margin-bottom:4px;">
-      <h1 style="margin:0;">Sessions</h1>
+      <h1 id="pageTitle" style="margin:0;">Sessions</h1>
       <div class="btnrow">
+        <a id="showAll" class="btn small ghost hidden" href="/sessions">Show all</a>
         <button id="btnCompare" class="btn small" disabled>Compare (0/2)</button>
         <button id="btnRefresh" class="btn small ghost">Refresh</button>
       </div>
@@ -102,7 +103,14 @@
       listEl.innerHTML = '<div class="loadbar"></div><p class="loadnote">Loading sessions…</p>';
       try {
         const data = await api("/api/sessions");
-        const list = data.sessions || [];
+        let list = data.sessions || [];
+        const carFilter = FH.qs("car");
+        if (carFilter) {
+          list = list.filter((s) => String(s.car_ordinal) === String(carFilter));
+          const nm = (list[0] && list[0].car_name) || ("Car #" + carFilter);
+          document.getElementById("pageTitle").textContent = nm;
+          document.getElementById("showAll").classList.remove("hidden");
+        }
         document.getElementById("empty").classList.toggle("hidden", list.length > 0);
         listEl.innerHTML = list.map(card).join("");
         const st = data.storage || {};

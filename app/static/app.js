@@ -488,12 +488,10 @@
     { href: "/coach", key: "coach", label: "Coach",
       icon: '<path d="M12 3l7 4v5c0 4-3 7-7 8-4-1-7-4-7-8V7l7-4z"/><path d="M9.3 12l1.9 1.9 3.4-3.8"/>' },
     { href: "/analysis", key: "analysis", label: "Analysis",
-      icon: '<path d="M4 5v14h16"/><path d="M7 15l3.5-5 3 3L18 7"/>' },
-    { href: "/compare", key: "compare", label: "Compare",
-      icon: '<circle cx="9.5" cy="12" r="5.5"/><circle cx="14.5" cy="12" r="5.5"/>' },
-    { href: "/debug", key: "debug", label: "Debug",
-      icon: '<rect x="8" y="8" width="8" height="8" rx="1.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5L8 8M18.5 5.5L16 8M5.5 18.5L8 16M18.5 18.5L16 16"/>' }
+      icon: '<path d="M4 5v14h16"/><path d="M7 15l3.5-5 3 3L18 7"/>' }
   ];
+  // Compare is reached from Sessions (pick two); Debug lives behind the
+  // connection status. Keeping the phone tab bar to five keeps it glanceable.
 
   function shell(active, opts) {
     opts = opts || {};
@@ -501,8 +499,8 @@
       '<a href="' + n.href + '"' + (n.key === active ? ' class="active"' : "") + ">" + n.label + "</a>"
     ).join("");
     const status = opts.status
-      ? '<span class="status"><span id="connDot" class="dot"></span>' +
-        '<span id="connText">Offline</span><span id="pps" class="pps">0 pps</span></span>'
+      ? '<a href="/debug" class="status" aria-label="Connection diagnostics" style="text-decoration:none"><span id="connDot" class="dot"></span>' +
+        '<span id="connText">Offline</span><span id="pps" class="pps">0 pps</span></a>'
       : (opts.statusRight || "");
 
     const top = document.createElement("header");

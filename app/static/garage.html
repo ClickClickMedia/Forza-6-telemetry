@@ -70,7 +70,7 @@
       // A car with sessions links into Analysis (the per-car workspace);
       // a name-only car (tuned but not yet driven) shows without the link.
       const actions = c.session_count
-        ? '<div class="actions"><a class="btn small primary" href="/sessions">View sessions</a></div>'
+        ? '<div class="actions"><a class="btn small primary" href="/sessions?car=' + c.ordinal + '">View sessions</a></div>'
         : "";
       return '<article class="card session-card">' +
         '<div class="title-row">' +
