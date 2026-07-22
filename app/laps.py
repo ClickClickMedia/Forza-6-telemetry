@@ -651,6 +651,100 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
     spin_inside = round(spin_inside, 1)
     spin_outside = round(spin_outside, 1)
 
+    # --- Absolute saturation + balance oscillation -----------------------
+    # A near-zero understeer index can sit on a violently bimodal signal:
+    # when both axles are past the grip limit the limiting end flips
+    # front<->rear many times a second, which the driver feels as
+    # "psychotic". Count those reversals (hysteresis ±0.5 on the axle slip
+    # difference so chatter doesn't inflate it) over cornering time.
+    both_axles_saturated = bool(front_sa_corner > 1.0 and rear_sa_corner > 1.0)
+    bal_diff = front_comb - rear_comb
+    lim = np.zeros(bal_diff.size, dtype=np.int8)
+    lim[bal_diff > 0.5] = 1
+    lim[bal_diff < -0.5] = -1
+    nz = lim[cornering]
+    nz = nz[nz != 0]
+    reversals = int(np.sum(np.abs(np.diff(nz)) == 2)) if nz.size > 1 else 0
+    corner_time = float(np.sum(dt[cornering]))
+    reversal_rate = (round(reversals / (corner_time / 60.0), 1)
+                     if corner_time > 5.0 else 0.0)
+
+    # --- Slide time split by throttle state (opposite fixes) -------------
+    # Power-on slide is the engine overwhelming the tyres (diff/throttle
+    # fix); off-throttle slide is an entry/trail-braking balance slide
+    # (alignment/ARB fix). Blending them into one number hides the fork.
+    any_axle_slide = front_slide | rear_slide
+    slide_power_on_s = round(
+        float(np.sum(dt[any_axle_slide & (accel > 0.4) & moving])), 1)
+    slide_off_throttle_s = round(
+        float(np.sum(dt[any_axle_slide & (accel < 0.05) & moving])), 1)
+
+    # --- Front/rear slide overlap + event-duration shape -----------------
+    both_slide = front_slide & rear_slide
+    slide_overlap_s = round(float(np.sum(dt[both_slide])), 1)
+    _move_t = float(np.sum(dt[moving]))
+    four_wheel_slide_pct = (round(float(np.sum(dt[both_slide & moving]))
+                                  / _move_t * 100.0, 1) if _move_t > 0 else 0.0)
+    _spans = _mask_spans(any_axle_slide)
+    _durs = np.array([float(np.sum(dt[s:e])) for s, e in _spans]) \
+        if _spans else np.array([])
+    slide_event_median_s = round(float(np.median(_durs)), 2) if _durs.size else 0.0
+    slide_pct_under_half = (round(float(np.mean(_durs < 0.5)) * 100.0, 0)
+                            if _durs.size else 0.0)
+
+    # --- Tyre temperature trend across the session -----------------------
+    tm = sd.col("t_mono")[sl]
+
+    def _axle_temp_slope(a: int, b: int):  # °C per minute over active driving
+        y = (temps_c[a][active] + temps_c[b][active]) / 2.0
+        x = tm[active]
+        if x.size < 30 or float(x[-1] - x[0]) < 30.0:
+            return None
+        return round(float(np.polyfit(x - x[0], y, 1)[0]) * 60.0, 1)
+
+    front_temp_slope = _axle_temp_slope(0, 1)
+    rear_temp_slope = _axle_temp_slope(2, 3)
+    _front_axle_active = (temps_c[0][active] + temps_c[1][active]) / 2.0
+    _rear_axle_active = (temps_c[2][active] + temps_c[3][active]) / 2.0
+    front_pct_over_window = (round(float(np.mean(_front_axle_active > TEMP_HOT_C))
+                                   * 100.0, 0) if _front_axle_active.size else 0.0)
+    rear_pct_over_window = (round(float(np.mean(_rear_axle_active > TEMP_HOT_C))
+                                  * 100.0, 0) if _rear_axle_active.size else 0.0)
+
+    def _temp_tag(slope):
+        if slope is None:
+            return "unknown"
+        if slope >= 3.0:
+            return "runaway (still climbing)"
+        if slope <= -3.0:
+            return "cooling"
+        return "steady"
+
+    # --- Body-control state: squat / dive / roll -------------------------
+    # Pitch and roll excursions the avg/max travel numbers don't reveal —
+    # the metrics that show whether stiffer springs/bars/dampers actually
+    # calmed the platform. (0 = extended, 1 = bottomed.)
+    susp_f = (susp[0] + susp[1]) / 2.0
+    susp_r = (susp[2] + susp[3]) / 2.0
+    on_power = (accel > 0.6) & moving
+    on_brake = (brake > 0.3) & moving
+    squat_rear_minus_front = (round(float(np.mean((susp_r - susp_f)[on_power])), 3)
+                              if int(np.sum(on_power)) else None)
+    dive_front_minus_rear = (round(float(np.mean((susp_f - susp_r)[on_brake])), 3)
+                             if int(np.sum(on_brake)) else None)
+    corner_m = cornering & moving
+    roll_front_p95 = (round(float(np.percentile(np.abs(susp[0] - susp[1])[corner_m], 95)), 3)
+                      if int(np.sum(corner_m)) else None)
+    roll_rear_p95 = (round(float(np.percentile(np.abs(susp[2] - susp[3])[corner_m], 95)), 3)
+                     if int(np.sum(corner_m)) else None)
+
+    # --- Steering saturation: over-driving / full-lock exposure ----------
+    # Time spent at near-full steering lock while cornering; a high share
+    # is the driver at the limit (or the car forcing it), not a setup lever.
+    full_lock = (np.abs(steer) >= 0.95) & cornering
+    full_lock_pct = (round(float(np.sum(dt[full_lock])) / corner_time * 100.0, 1)
+                     if corner_time > 5.0 else 0.0)
+
     # Brake lock via WHEEL-SPEED DEFICIT — the honest detector. Forza's
     # normalized slip ratio crosses -0.5 during ordinary hard braking with
     # no lockup (verified: a session with 5-6 s of slip<-0.5 showed 0.0 s
@@ -797,10 +891,18 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
         "temp_fr_delta_c": round(
             float(np.mean(front_temps) - np.mean(rear_temps)), 1
         ),
+        "temp_front_slope_c_per_min": front_temp_slope,
+        "temp_rear_slope_c_per_min": rear_temp_slope,
+        "temp_front_pct_over_window": front_pct_over_window,
+        "temp_rear_pct_over_window": rear_pct_over_window,
+        "temp_front_trend": _temp_tag(front_temp_slope),
+        "temp_rear_trend": _temp_tag(rear_temp_slope),
         "balance": {
             "understeer_index": round(usi, 4),
             "front_slip_angle_corner_avg": round(front_sa_corner, 4),
             "rear_slip_angle_corner_avg": round(rear_sa_corner, 4),
+            "both_axles_saturated": both_axles_saturated,
+            "reversal_rate_per_min": reversal_rate,
             "pct_cornering": round(_pct(cornering, dt), 1),
             "pct_drifting": round(_pct(drifting, dt), 1),
             "front_slide_time_s": front_slide_g["total_s"],
@@ -809,6 +911,10 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "rear_slide_events": rear_slide_g["events"],
             "front_slide_longest_s": front_slide_g["longest_s"],
             "rear_slide_longest_s": rear_slide_g["longest_s"],
+            "slide_overlap_s": slide_overlap_s,
+            "four_wheel_slide_pct": four_wheel_slide_pct,
+            "slide_event_median_s": slide_event_median_s,
+            "slide_pct_under_half_s": slide_pct_under_half,
             "phases": phases,
         },
         "traction": {
@@ -836,6 +942,8 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             "near_lock_s": near_lock_s,
             "near_lock_pct_of_braking": near_lock_pct,
             "rear_temps_wire_identical": rear_temps_identical,
+            "slide_power_on_s": slide_power_on_s,
+            "slide_off_throttle_s": slide_off_throttle_s,
         },
         "observed_peaks": {
             "power_kw": peak_power_kw,
@@ -858,6 +966,11 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
         "suspension_bottom_longest_s": bottom_longest,
         "suspension_time_at_bottom_s": time_at_bottom,
         "suspension_travel_p99": travel_p99,
+        "squat_rear_minus_front": squat_rear_minus_front,
+        "dive_front_minus_rear": dive_front_minus_rear,
+        "roll_front_p95": roll_front_p95,
+        "roll_rear_p95": roll_rear_p95,
+        "full_lock_pct_of_cornering": full_lock_pct,
         "gearing": {
             # Forza emits gear 0 for reverse and >=11 for neutral; only real
             # forward gears count as "top gear".

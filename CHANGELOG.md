@@ -4,6 +4,49 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-07-22
+
+### Added — diagnostic depth (from a six-agent teardown of a hard AWD case)
+A multi-agent review of a "psychotic" 628 kW AWD drift-converted BMW —
+where a near-zero understeer index hid a car sliding all four wheels —
+surfaced what the summary buried. New metrics, all computed from channels
+already on the wire (no fabricated sensors):
+- **Grip-deficit banner** — when both axles are past the grip limit the
+  report says so plainly and states the understeer index is *not a tuning
+  target* (tuning redistributes grip, it can't add it; the fix is the
+  build). This was the single insight every analyst had to reconstruct by
+  hand.
+- **Balance-oscillation rate** — how often the limiting axle flips
+  front↔rear per minute. A near-zero index can sit on a signal whipsawing
+  1–2×/second, which is what "psychotic/nervous" actually is.
+- **Slide split by throttle state** — power-on wheelspin (diff/throttle
+  fix) vs off-throttle lateral slide (alignment/ARB fix); the report was
+  blending two problems that need opposite levers.
+- **Slide overlap %, four-wheel fraction and event-duration shape** —
+  front and rear slide totals now read as one overlapping event, with a
+  spiky-vs-sustained median.
+- **Tyre-temperature trend** — per-axle °C/min slope, %-time over window,
+  and a warming/steady/runaway tag (peak alone hid a rear in thermal
+  runaway).
+- **Body-control** — squat, dive and roll-p95 (the pitch/roll the avg/max
+  travel numbers don't show).
+- **Steering saturation** — %-cornering at ≥95% lock (an over-driving
+  signal).
+- **First-tune mode** — a third "Report goal" option beside Tune advice
+  and Experiment: a complete one-shot coordinated setup for a new/unsorted
+  car, opt-in.
+- Prompt hardening: both-axles-saturated → index isn't a target; separate
+  power-on spin from off-throttle slide; read temp *trend*; you don't know
+  each slider's min/max, so don't assume headroom. Setup-provenance
+  warning promoted into the report by the setup table.
+
+### Fixed
+- Lap-table "Avg km/h" now matches distance/time (the v2.5.0 duplicate-
+  timestamp fix resolved this too — the same inflated `dt` had skewed
+  `route_m`). Lap distances labelled "km driven" (driven path, not track
+  length). `README.txt` in the package no longer overclaims that
+  `sections.json` holds every instance.
+
 ## [2.5.0] - 2026-07-22
 
 ### Fixed — time-metric inflation (found via a raw-data forensic review)

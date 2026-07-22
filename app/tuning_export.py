@@ -61,6 +61,39 @@ rear-drive platform"), but do not invent Forza-specific facts — installed
 upgrades, in-game tuning ranges, or "meta" tunes — and never let context
 override the measured telemetry. If you lack live web access, do not claim
 to have researched anything; reason from the telemetry and say so.
+When both axles are flagged past the grip limit, the balance index is not
+a tuning target — say so and look to the build (tyres/power). Treat
+power-on wheelspin and off-throttle lateral slide as separate problems
+with different levers. Read tyre-temperature TREND, not just the peak.
+You do not know each slider's min/max range for this car (Forza does not
+broadcast it) — do not assume headroom in either direction; if a change
+would need to exceed a plausible range, flag it "if the slider allows".
+Never invent data this export does not contain.
+"""
+
+FIRSTTUNE_PROMPT = """\
+Produce a complete one-shot tune for this car — a full baseline setup, not
+a cautious single change. This is the "first tune" objective: the car is
+new or far from sorted, and coordinated changes across every subsystem are
+expected and wanted.
+
+Give concrete target values (from the current setup shown) for tyres,
+gearing, alignment, anti-roll bars, springs, ride height, damping, aero,
+differential and brakes — everything the evidence supports moving. Order
+them most-impactful first and cite the telemetry behind each. Judge the
+result by repeatable matched pace, usable throttle and stability — not by
+neutrality alone, and not by a lower understeer index.
+
+Ground rules that still hold:
+- If both axles are flagged past the grip limit, say plainly that the
+  ceiling is the BUILD (tyre compound/width, then power) and that the tune
+  can only calm the car, not add grip.
+- Separate power-on wheelspin (diff/throttle/gearing) from off-throttle
+  lateral slide (alignment/ARB/decel-diff) — they need different levers.
+- You do not know each slider's min/max range; do not assume headroom, and
+  flag any change that may exceed a plausible range.
+- Because many settings move at once, a faster result proves the WHOLE
+  tune worked, not which setting did — say so.
 Never invent data this export does not contain.
 """
 
@@ -313,6 +346,13 @@ def _setup_section(add, setup: Dict[str, Any],
                    prev_setup: Dict[str, Any] = None) -> None:
     data = setup.get("data") or {}
     add(f"## My setup — {setup.get('label', 'current')} *(user-entered)*")
+    add("")
+    add("*Provenance: this is the latest tune saved for the car, not a "
+        "snapshot captured at recording time — if it was edited after the "
+        "run, it may not be exactly the tune that produced this telemetry. "
+        "Do not treat a setting as proven by the result unless the driver "
+        "confirms it was unchanged. These are the current slider values; "
+        "their min/max range for this car is not known.*")
     add("")
     _, n_tunables = _setup_supplied_state(setup)
     if n_tunables == 0:
@@ -600,6 +640,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     data_only = variant == "data" and setup is None
     quick = variant == "quick"
     experiment = variant == "experiment"
+    first_tune = variant == "first_tune"
 
     add("## Car")
     add("")
@@ -739,15 +780,33 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
 
     add("## Balance & traction")
     add("")
-    add(f"- Balance verdict: **{balance.get('verdict', '?')}** · "
-        f"understeer index {balance.get('understeer_index', 0):+.3f} "
+    sb = session.get("balance", {})
+    saturated = sb.get("both_axles_saturated")
+    fu = balance.get("front_slip_angle_corner_avg", 0)
+    ru = balance.get("rear_slip_angle_corner_avg", 0)
+    if saturated:
+        add(f"- **⚠ GRIP-DEFICIT — both axles are past the grip limit "
+            f"(front {fu:.2f} / rear {ru:.2f} of limit).** The car is sliding "
+            f"at both ends at once, not balanced. The understeer index below "
+            f"is **not a tuning target** here: tuning redistributes grip "
+            f"between axles, it cannot add grip when both are gone. The "
+            f"primary fix is the BUILD (tyre compound/width, then power); "
+            f"tune changes are secondary.")
+    add(f"- Balance verdict: **{balance.get('verdict', '?')}"
+        + ("" if not saturated else " — index not a tuning target (both axles saturated)")
+        + f"** · understeer index {balance.get('understeer_index', 0):+.3f} "
         f"(mean normalized |front slip angle| − |rear|, cornering on grip; "
-        f"front axle ran {balance.get('front_slip_angle_corner_avg', 0):.2f} "
-        f"of grip limit, rear {balance.get('rear_slip_angle_corner_avg', 0):.2f})")
+        f"front axle ran {fu:.2f} of grip limit, rear {ru:.2f})")
+    rr = sb.get("reversal_rate_per_min")
+    if rr and rr >= 10:
+        add(f"- Balance oscillation: the limiting axle flips front↔rear "
+            f"**{rr:.0f}×/min** while cornering — a near-zero understeer index "
+            f"can sit on a signal that is whipsawing (what a driver feels as "
+            f"'nervous' or 'psychotic'). Aim for one consistent failure mode "
+            f"rather than chasing a lower index.")
     if balance.get("caveat"):
         add(f"- ⚠ {balance['caveat']} "
             f"(drift/opposite-lock time: {balance.get('pct_drifting', 0):.0f} % of session)")
-    sb = session.get("balance", {})
     for axle in ("front", "rear"):
         ev, tot, lng = (sb.get(f"{axle}_slide_events", 0),
                         sb.get(f"{axle}_slide_time_s", 0),
@@ -764,6 +823,20 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             f"rear {sb.get('rear_slide_events', 0)}× · "
             f"{sb.get('rear_slide_time_s', 0):.1f} s total · "
             f"longest {sb.get('rear_slide_longest_s', 0):.1f} s")
+        overlap = sb.get("slide_overlap_s")
+        if overlap is not None:
+            add(f"- Slide overlap: **{overlap:.1f} s both axles sliding at "
+                f"once** ({sb.get('four_wheel_slide_pct', 0):.0f}% of moving "
+                f"time) — read the front and rear totals as one overlapping "
+                f"event, not two separate problems. Slide events median "
+                f"**{sb.get('slide_event_median_s', 0):.2f} s**, "
+                f"{sb.get('slide_pct_under_half_s', 0):.0f}% under 0.5 s "
+                f"(spiky flick-in/flick-out, not held drifts).")
+    fl = session.get("full_lock_pct_of_cornering")
+    if fl and fl >= 20:
+        add(f"- Steering saturation: **{fl:.0f}% of cornering at ≥95% lock** "
+            f"— a driver-at-the-limit / over-driving signal (or the car "
+            f"forcing full lock), not a setup lever by itself.")
     phases = sb.get("phases") or {}
     phase_bits = []
     for pname in ("entry", "mid", "exit", "lift"):
@@ -799,6 +872,14 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         + (" — **TCS declared on: these figures are what the assist could "
            "not contain, a floor not the full picture**"
            if sdata.get("tcs_assist") == "On" else ""))
+    pon, poff = trac.get("slide_power_on_s"), trac.get("slide_off_throttle_s")
+    if pon is not None and poff is not None and (pon or poff):
+        add(f"- Slide by throttle state *(the diagnostic fork — these need "
+            f"opposite fixes)*: **power-on {pon:.1f} s** (engine overwhelming "
+            f"the tyres on exit → diff / throttle / gearing) vs "
+            f"**off-throttle {poff:.1f} s** (entry / trail-braking balance "
+            f"slide → alignment / ARB / decel-diff). Do not treat them as one "
+            f"'wheelspin' problem.")
     byw = trac.get("wheelspin_by_wheel_s") or {}
     if byw and trac.get("wheelspin_total_s", 0) > 0:
         single = sum(byw.values())
@@ -871,6 +952,20 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         f"{session.get('suspension_bottom_longest_s', 0):.2f} s · "
         f"99th-percentile travel {session.get('suspension_travel_p99', 0):.2f} "
         f"(brief single-frame spikes can touch 1.00 without a sustained event)")
+    sq = session.get("squat_rear_minus_front")
+    dv = session.get("dive_front_minus_rear")
+    rf, rr_ = session.get("roll_front_p95"), session.get("roll_rear_p95")
+    if sq is not None or dv is not None or rf is not None:
+        bits = []
+        if sq is not None:
+            bits.append(f"squat (rear−front travel on power) {sq:+.2f}")
+        if dv is not None:
+            bits.append(f"dive (front−rear on brake) {dv:+.2f}")
+        if rf is not None and rr_ is not None:
+            bits.append(f"roll p95 front {rf:.2f} / rear {rr_:.2f}")
+        add("- Body-control (pitch/roll excursions the avg/max above hide; "
+            "these are what stiffer springs/bars/dampers move): "
+            + " · ".join(bits))
     add("")
 
     # Session-wide aggregate AFTER the section evidence: it summarises the
@@ -900,6 +995,19 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add(f"- Working window for reference: {window[0]:.0f}–{window[1]:.0f} °C — "
         f"a generic road-racing heuristic; actual targets vary by tyre "
         f"compound, which telemetry does not report")
+    fsl = session.get("temp_front_slope_c_per_min")
+    rsl = session.get("temp_rear_slope_c_per_min")
+    if fsl is not None or rsl is not None:
+        fs = f"{fsl:+.1f} °C/min, " if fsl is not None else ""
+        rs = f"{rsl:+.1f} °C/min, " if rsl is not None else ""
+        add(f"- Temperature trend across the session *(not just the peak — a "
+            f"climbing tyre keeps shedding grip; a plateaued one has found "
+            f"its level)*: front **{session.get('temp_front_trend','?')}** "
+            f"({fs}{session.get('temp_front_pct_over_window',0):.0f}% of "
+            f"active driving over window) · rear "
+            f"**{session.get('temp_rear_trend','?')}** "
+            f"({rs}{session.get('temp_rear_pct_over_window',0):.0f}% over "
+            f"window)")
     wet_w, dark_w = _declared_conditions(str(meta.get("notes") or ""))
     if wet_w or dark_w:
         add(f"- ⚠ Conditions declared in the session note "
@@ -958,11 +1066,11 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         for l in rep["laps"]:
             if l.get("run"):
                 label = f"Run {l['run']}"
-                extra = f" · {l.get('route_m', 0) / 1000:.1f} km route"
+                extra = f" · {l.get('route_m', 0) / 1000:.1f} km driven"
             else:
                 seq += 1
                 label = str(seq)
-                extra = (f" · {l['route_m'] / 1000:.2f} km"
+                extra = (f" · {l['route_m'] / 1000:.2f} km driven"
                          if l.get("route_m") else "")
             partial = not l.get("complete")
             if l.get("rewind_affected"):
@@ -1043,7 +1151,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             "with your stated confidence. Never invent specific setting "
             "values.")
         add("")
-    elif variant in ("full", "experiment"):
+    elif variant in ("full", "experiment", "first_tune"):
         add("## My current setup (fill in before asking the AI)")
         add("")
         if experiment:
@@ -1082,7 +1190,8 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                 f"choices (engine/aspiration swaps, tyre compound, aero), and "
                 f"use my answer as the car identity throughout.")
             add("")
-        add(EXPERIMENT_PROMPT if experiment
+        add(FIRSTTUNE_PROMPT if first_tune
+            else EXPERIMENT_PROMPT if experiment
             else QUICK_PROMPT if quick else AI_PROMPT)
     else:
         add("*This export contains evidence only and makes no request for "

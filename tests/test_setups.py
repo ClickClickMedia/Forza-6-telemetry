@@ -129,6 +129,53 @@ def test_engineering_prompt_has_causality_guardrail():
     assert "not which setting caused it" in md
 
 
+def test_first_tune_mode_prompts_full_coordinated_setup():
+    """First-tune mode asks for a complete one-shot coordinated tune, and is
+    opt-in — the default and experiment prompts are unaffected."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v1", "data": {"arb_f": "20"}}
+    md = build_markdown(sd, META, "2.6.0", setup=setup, variant="first_tune")
+    flat = " ".join(md.split())
+    assert "complete one-shot tune" in flat
+    assert "not a cautious single change" in flat
+    # It keeps the honesty rails.
+    assert "you do not know each slider" in flat.lower()
+    # Default and experiment stay distinct.
+    default = build_markdown(sd, META, "2.6.0", setup=setup)
+    assert "complete one-shot tune" not in default
+
+
+def test_prompt_carries_saturation_and_throttle_guidance():
+    sd = _synthetic_session(seconds=30.0)
+    md = build_markdown(sd, META, "2.6.0", setup={"label": "v", "data": {}})
+    low = " ".join(md.lower().split())  # collapse prompt line-wraps
+    assert "the balance index is not a tuning target" in low
+    assert "power-on wheelspin and off-throttle lateral slide" in low
+    assert "read tyre-temperature trend, not just the peak" in low
+    assert "do not assume headroom" in low
+
+
+def test_new_session_metrics_present():
+    """The v2.6.0 diagnostic metrics compute and are exported."""
+    from app.laps import lap_report
+    rep = lap_report(_synthetic_session(seconds=60.0))
+    b = rep["session"]["balance"]
+    tr = rep["session"]["traction"]
+    s = rep["session"]
+    for k in ("both_axles_saturated", "reversal_rate_per_min",
+              "slide_overlap_s", "four_wheel_slide_pct",
+              "slide_event_median_s", "slide_pct_under_half_s"):
+        assert k in b, k
+    for k in ("slide_power_on_s", "slide_off_throttle_s"):
+        assert k in tr, k
+    for k in ("temp_front_trend", "temp_rear_trend",
+              "temp_front_pct_over_window", "squat_rear_minus_front",
+              "dive_front_minus_rear", "roll_front_p95",
+              "full_lock_pct_of_cornering"):
+        assert k in s, k
+    assert isinstance(b["both_axles_saturated"], bool)
+
+
 def test_experiment_mode_prompts_bold_single_variable():
     """Experiment mode is opt-in and deliberately flips the caution: one
     variable, pushed to a near-extreme, falsifiable — NOT a cautious tune."""
