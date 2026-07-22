@@ -35,7 +35,10 @@ Prioritise:
 2. The driver's described problem area.
 3. Behaviour by section type: hairpin, turn, sweeper, transfer, straight.
 4. The representative section samples, not only session-wide averages.
-5. The smallest tune change that tests the strongest hypothesis.
+5. An intervention scaled to the evidence: a coordinated multi-setting
+   tune when the telemetry shows a fundamental imbalance (e.g. one axle
+   far past its grip limit while the other is underused), a single
+   targeted change when the car is already close. Say which case applies.
 
 Do not assume a lower understeer index is automatically faster.
 Do not recommend changes from session-wide averages alone.
@@ -52,6 +55,12 @@ sessions isolate that one variable).
 "No setup change recommended" is a valid answer when evidence is weak,
 the clock is improving, or driver variance dominates — prefer "collect
 more evidence" over speculative tuning.
+You may use general knowledge of the car's real-world layout and
+drivetrain as clearly-labelled context (e.g. "an AWD conversion of a
+rear-drive platform"), but do not invent Forza-specific facts — installed
+upgrades, in-game tuning ranges, or "meta" tunes — and never let context
+override the measured telemetry. If you lack live web access, do not claim
+to have researched anything; reason from the telemetry and say so.
 Never invent data this export does not contain.
 """
 

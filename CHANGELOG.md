@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.1] - 2026-07-22
+
+### Changed — tune-advice prompt calibration
+- **Interventions now scale to the evidence.** The default tune-advice
+  prompt asked for "the smallest tune change"; it now asks for a
+  coordinated multi-setting tune when the telemetry shows a fundamental
+  imbalance (one axle far past its grip limit while the other is
+  underused) and a single targeted change when the car is already close —
+  so an obviously-wrong baseline gets a proper first-tune overhaul, not a
+  timid nudge.
+- **Safe vehicle context, no fabrication.** The AI may use general
+  knowledge of a car's real-world layout/drivetrain as clearly-labelled
+  context, but must not invent Forza-specific facts (upgrades, in-game
+  ranges, "meta" tunes), must not let context override measured
+  telemetry, and must not claim to have researched anything without live
+  web access. (A full "research the FH6 model + cite sources" instruction
+  was deliberately declined — it invites hallucinated FH6 facts, which
+  the whole evidence-first design exists to prevent.)
+
 ## [2.4.0] - 2026-07-21
 
 ### Added — experiment mode (opt-in)
