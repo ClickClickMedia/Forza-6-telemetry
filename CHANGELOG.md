@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.12.1] - 2026-07-22
+
+### Changed
+- Analysis page: the coach's read card now sits **under the route map**
+  rather than pinned at the very top — it reads better after the lap/route
+  context.
+
 ## [2.12.0] - 2026-07-22
 
 ### Changed — sharper, non-leading evidence
