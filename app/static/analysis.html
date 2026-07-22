@@ -47,15 +47,17 @@
         </div>
         <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
         <div class="exportbar">
-          <button id="btnQuick" class="btn primary">⚡ Quick analysis</button>
+          <a id="lnkPackageMain" class="btn primary" href="#" download>📦 AI package (.zip)</a>
           <button id="btnCopySetup" class="btn">Engineering brief</button>
+          <button id="btnQuick" class="btn ghost">⚡ Quick analysis</button>
           <button id="btnCopyData" class="btn ghost">Copy evidence</button>
           <button id="btnFiles" class="btn ghost">Export files ▾</button>
         </div>
-        <p class="muted small" style="margin:6px 0 0;">Copies a report to
-          your clipboard. <b>No AI runs inside the tool</b> — paste it into
-          ChatGPT or Claude yourself if you want interpretation, or just
-          read it.</p>
+        <p class="muted small" style="margin:6px 0 0;">The <b>AI package</b>
+          is the best hand-off — the full data as files, so the AI does its
+          own analysis (start with <code>START-HERE.md</code>). The copy
+          buttons are the quick clipboard version. <b>No AI runs inside the
+          tool</b> — you paste into ChatGPT or Claude yourself.</p>
       </div>
 
       <!-- Tuning verdicts -->
@@ -549,6 +551,7 @@
       document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
       document.getElementById("lnkSections").href = "/api/sessions/" + sessionId + "/sections.json?download=1";
       document.getElementById("lnkPackage").href = "/api/sessions/" + sessionId + "/package.zip";
+      document.getElementById("lnkPackageMain").href = "/api/sessions/" + sessionId + "/package.zip";
       msg.classList.add("hidden");
       content.classList.add("hidden");
       loading.classList.remove("hidden");

@@ -89,6 +89,65 @@ def _fmt_lap_time(seconds: Optional[float]) -> str:
     return f"{m}:{s:06.3f}"
 
 
+_CLASS_LETTER = {0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "S3",
+                 7: "X"}
+_DRIVETRAIN = {0: "FWD", 1: "RWD", 2: "AWD"}
+
+
+def build_package_index(meta: Dict[str, Any], frame_count: int,
+                        has_raw: bool = True, has_setup: bool = True,
+                        sampled: bool = False) -> str:
+    """The AI-facing entry file (START-HERE.md) for a session package: the
+    tune ask, a manifest of the files, and the one instruction that changes
+    with sampling — read a compact trace whole, but sample the full capture."""
+    car = meta.get("car_name") or f"Forza ordinal {meta.get('car_ordinal', '?')}"
+    bits = [_CLASS_LETTER.get(meta.get("car_class"), ""),
+            str(meta.get("car_pi")) if meta.get("car_pi") else "",
+            _DRIVETRAIN.get(meta.get("drivetrain"), "")]
+    ident = " ".join(b for b in bits if b)
+    ident = f" ({ident})" if ident else ""
+
+    if sampled:
+        data_lines = ["The traces in this package are already downsampled to "
+                      "the moments that matter — **read every row**, don't "
+                      "skim or grep just a few lines.", ""]
+    elif has_raw:
+        data_lines = [f"`raw-telemetry.csv` is the complete capture "
+                      f"(~{frame_count:,} rows) — load it with code and sample "
+                      "or aggregate as you need.", ""]
+    else:
+        data_lines = []
+
+    manifest = ["- `report.md` — evidence digest, your saved tune, and the ask",
+                "- `raw-telemetry.csv` — the complete ~60 Hz capture, every "
+                "channel" if has_raw else None,
+                "- `corner-events.json` — every detected corner with its "
+                "channels and aggregates",
+                "- `laps.csv` — one row per lap/run",
+                "- `session-info.json` — car identity, lap validity, timed "
+                "windows",
+                "- `your-tune.json` — the setup values on the car"
+                if has_setup else None]
+
+    lines = [
+        "# Start here", "",
+        f"Forza Horizon 6 telemetry package for **{car}**{ident}, exported by "
+        "Forza-6-telemetry.", "",
+        "You are an expert Forza Horizon 6 tuner. Review this package and give "
+        "a competitive tune — the changes you'd make, in priority order, and "
+        "briefly why each one.", "",
+        "The numbers in `report.md` are a curated summary. The **full data is "
+        "in this package as files** — use them and do your own analysis, "
+        "don't work from the summary alone:", "",
+        *[m for m in manifest if m], "",
+        *data_lines,
+        "This is real telemetry from Forza's Data Out: no tyre-pressure "
+        "channel, one temperature per tyre, and unknown in-game slider ranges "
+        "— don't invent numbers it doesn't contain.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _md_table(headers: List[str], rows: List[List[Any]]) -> str:
     out = ["| " + " | ".join(headers) + " |",
            "| " + " | ".join("---" for _ in headers) + " |"]

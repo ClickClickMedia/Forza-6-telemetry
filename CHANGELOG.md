@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] - 2026-07-22
+
+### Changed — the AI package is the primary hand-off
+The full evidence bundle (`.zip`) is now the recommended way to give a
+session to an AI, surfaced as the dominant action on the Analysis page. The
+Markdown copy is a curated *summary* — medians and a few samples — which
+throws away signal a capable model would use. The package ships the **full
+data as files** (raw ~60 Hz telemetry, per-corner events, laps, session info,
+your tune) so the AI does its own analysis instead of trusting our digest.
+This is the same lesson as the lean prompts, from the other side: less
+*instruction*, richer *evidence* (observed — the ZIP gives noticeably better
+tuning and insight than the summary alone).
+
+- New **`START-HERE.md`** entry file: the lean tune ask, a manifest of every
+  file, and one instruction that adapts to the data — for a full raw capture
+  it says "load it with code and sample"; for a compact/downsampled trace it
+  says "read every row, don't skim." (Spatial resampling isn't built yet —
+  this is the hook for it.)
+- Files renamed for clarity: `report.md`, `raw-telemetry.csv`,
+  `corner-events.json`, `laps.csv`, `session-info.json`, `your-tune.json`.
+- Descriptive download name, e.g.
+  `FH6_2005-Porche-Cayman-GT3-WTAC_S1-800_2026-07-22.zip`.
+
 ## [2.9.0] - 2026-07-22
 
 ### Changed — lean AI prompts (less is more)

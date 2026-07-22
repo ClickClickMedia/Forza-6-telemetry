@@ -231,13 +231,16 @@ setup values you fill into the report.
   per section, and representative samples timestamped so you can find them
   in the data. Session-wide averages hide where the car actually struggles;
   this doesn't.
-- **Readable evidence report** — a Markdown report you read yourself
-  ([example](docs/example-report.md)), or optionally paste into an AI. Copy
-  it four ways: **Quick analysis** (no setup), **Engineering brief** (with
-  your saved tune + changes since last revision), **Copy evidence** (no
-  prompt), or **Export files** — report, per-lap CSV, `sections.json`, raw
-  CSV, or a complete `.zip` package. Optional direct Claude connection over
-  MCP ([docs/CLAUDE-MCP.md](docs/CLAUDE-MCP.md)).
+- **AI package (the best hand-off)** — one `.zip` with the **full data as
+  files** (raw ~60 Hz telemetry, per-corner events, laps, session info, your
+  tune) and a lean `START-HERE.md` that tells the AI to do its own analysis
+  on the data, not just read a summary. A capable model tunes better with
+  raw evidence and a free hand than with our digest. For a quick clipboard
+  version there's also **Engineering brief** (your tune + a lean tune ask),
+  **Quick analysis** (no setup), and **Copy evidence** (pure telemetry, no
+  ask) — plus a readable [example report](docs/example-report.md) you can
+  just read. Optional direct Claude connection over MCP
+  ([docs/CLAUDE-MCP.md](docs/CLAUDE-MCP.md)).
 - **Honest before/after comparison** — each session is compared against the
   last run of the same car, but **only when the tool can confirm the route
   matches** (timed-loop length within 5%); otherwise it says so rather than
@@ -326,7 +329,7 @@ this cross-check live; if it ever fails on your setup,
 | GET | `/api/garage` | Per-car rollup (sessions, tune versions, best lap) |
 | GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data`, `?style=compact`, `?setup_id=N`, `?download=1`) |
 | GET | `/api/sessions/{id}/sections.json` | Structured corner-section evidence |
-| GET | `/api/sessions/{id}/package.zip` | Full session bundle (report, CSVs, sections, metadata, setup) |
+| GET | `/api/sessions/{id}/package.zip` | AI package: `START-HERE.md`, `report.md`, `raw-telemetry.csv`, `corner-events.json`, `laps.csv`, `session-info.json`, `your-tune.json` |
 | GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |
 | GET | `/api/sessions/{id}/route?colour_by=speed\|rear_slip` | Route trace |
 | GET | `/api/sessions/{id}/download.csv` | Raw frames CSV |

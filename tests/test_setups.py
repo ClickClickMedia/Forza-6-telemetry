@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from app.database import Database
-from app.tuning_export import build_markdown
+from app.tuning_export import build_markdown, build_package_index
 from tests.test_laps import _synthetic_session
 
 META = {"name": "S", "car_ordinal": 3726, "car_class": 4, "car_pi": 703,
@@ -170,6 +170,36 @@ def test_lean_prompts_are_expert_tuner_not_method_walls():
                  "do not assume headroom", "several tune settings changed",
                  "not evidence for this one", "CANNOT ASSESS"):
         assert gone not in default, gone
+
+
+def test_package_index_is_lean_and_manifests_the_files():
+    """START-HERE.md carries the lean ask, a file manifest, and the honesty
+    rail — the AI-facing entry to the ZIP."""
+    meta = dict(META, car_name="2005 Cayman GT3 WTAC", car_class=4,
+                car_pi=800, drivetrain=2)
+    md = build_package_index(meta, 25580, has_raw=True, has_setup=True)
+    assert "expert Forza Horizon 6 tuner" in md
+    assert "competitive tune" in md
+    for f in ("report.md", "raw-telemetry.csv", "corner-events.json",
+              "laps.csv", "session-info.json", "your-tune.json"):
+        assert f"`{f}`" in md, f
+    # A full export tells the AI to sample the raw capture, with the size.
+    assert "load it with code" in md and "25,580" in md
+    assert "no tyre-pressure channel" in md
+
+
+def test_package_index_sampled_says_read_it_all():
+    """The sampled/compact variant flips the instruction: read every row."""
+    md = build_package_index(META, 400, sampled=True).lower()
+    assert "read every row" in md and "don't skim" in md
+    assert "load it with code" not in md  # not a full dump to sample
+
+
+def test_package_index_omits_absent_files():
+    md = build_package_index(META, 100, has_raw=False, has_setup=False)
+    assert "raw-telemetry.csv" not in md
+    assert "your-tune.json" not in md
+    assert "`report.md`" in md  # always present
 
 
 def test_new_session_metrics_present():
