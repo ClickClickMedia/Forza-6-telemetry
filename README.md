@@ -126,8 +126,9 @@ setting values.**
      the **changes since the previous revision**, discipline and assists.
      A **Report goal** toggle sets what you want from it: *Tune advice*
      (scaled to the evidence), *First tune* (a complete one-shot setup for
-     a new car), or *Experiment* (one bold, reversible single-variable test
-     to learn the most from the next run).
+     a new car — [worked example](docs/example-first-tune.md)), or
+     *Experiment* (one bold, reversible single-variable test to learn the
+     most from the next run).
    This is a **separate step you choose to do** — the copy lands on your
    clipboard, and *you* paste it into Claude or ChatGPT. No AI runs inside
    the tool. Whatever an AI then suggests is on you to judge; it can spit

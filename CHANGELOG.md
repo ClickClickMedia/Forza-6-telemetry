@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-07-22
+
+### Changed — AI prompts hardened against context rot
+A real case drove this: a broad, confident tune (the kind that touches
+alignment, gearing, brakes, springs, aero and the diffs at once) took a
+mild-understeer AWD Cayman and made it 0.48 s slower with 26× the oversteer
+moments and a cooking rear axle — while the telemetry supported exactly one
+lever. The exports now push back on that failure mode:
+- **First-tune mode reframed** — "complete" now means a verdict per
+  subsystem (`CHANGE` / `RETAIN` / `CANNOT ASSESS` / `RANGE REQUIRED`), not
+  change-everything. Retaining most of the car is stated as a complete,
+  valid answer, and the prompt tells the AI to drop any change the report
+  shows no failure mode for.
+- **Cross-car transfer ban** — every analysis mode now carries an evidence
+  precedence + a rule not to carry tune values or ratios over from another
+  car or an earlier conversation. Current-session telemetry wins. This is
+  the direct antidote to a long chat importing another car's tune.
+- **Contradiction check** — the default tune-advice prompt tells the AI to
+  test each change against the evidence (no brake change without a braking
+  fault, no alignment change without tyre evidence, and so on).
+- New [worked first-tune example](docs/example-first-tune.md) from the
+  Cayman case.
+
+### Fixed
+- **Setup versions progress on change only.** Re-copying an unchanged tune
+  no longer mints a duplicate version; an identical re-save reuses the
+  current one (guarded at the `/api/setups` write, so the UI and MCP paths
+  are both covered).
+- **Session lineage compares only against earlier runs.** Re-opening an
+  older session's report compared it against runs recorded *after* it,
+  reversing the "since last session" delta. `sessions_for_car()` now
+  restricts to strictly-earlier sessions, as its contract always said.
+
+### Docs
+- README hero refreshed with current phone screenshots, including the new
+  Garage page and a Compare / detected-events row.
+
 ## [2.6.0] - 2026-07-22
 
 ### Added — diagnostic depth (from a six-agent teardown of a hard AWD case)
