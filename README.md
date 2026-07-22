@@ -24,14 +24,14 @@ stays on your own Wi-Fi — **no cloud, no account, no subscription**.
 > the comparisons and the decisions are all yours. Prefer to skip the AI
 > entirely? Just read the report.
 
-| Live · on the phone | Session analysis | Laps & route |
+| Live · on the phone | Laps & route | Garage |
 | --- | --- | --- |
-| ![Live dashboard on a phone — tyre pods, RPM, pedal ribbons](docs/images/live-dashboard.jpg) | ![Session analysis — named car, best lap, balance and tyre verdicts](docs/images/analysis-session.jpg) | ![Lap splits and the speed-coloured route map](docs/images/analysis-laps-route.jpg) |
+| ![Live view built like an instrument — tyre pods coloured by temperature, g-meter, power and torque, no cloud](docs/images/live-instrument.jpg) | ![Lap splits and the speed-coloured route map of a free-roam circuit](docs/images/laps-route.jpg) | ![Garage — every car you've driven or named, with best lap, session and tune counts](docs/images/garage.jpg) |
 
-*Real screenshots from a phone on the sofa — a Formula Drift ute being
-tuned into a circuit racer (rears cooked at 126 °C mid-lap), and a 3-lap
-race the game sent no lap data for, timed anyway by detecting start-line
-returns.*
+*Real screenshots from a phone on the sofa: the live view built like an
+instrument (tyre pods, g-meter, power — nothing leaves the phone), a
+free-roam circuit the game sent no lap data for, timed lap-by-lap by
+detecting start-line returns, and the Garage of every car you've tuned.*
 
 The live view is built like an instrument, not a website: huge numerals that
 never shift layout, tyre pods coloured by the **temperature window** (blue
