@@ -12,6 +12,34 @@
       "model": "Integra",
       "trim": "A-Spec",
       "verified": "owner-confirmed in-game 2026-07-18"
+    },
+    "3928": {
+      "year": "2021",
+      "manufacturer": "Hyundai",
+      "model": "i20",
+      "trim": "N",
+      "verified": "contributor-confirmed in-game 2026-07-22"
+    },
+    "3781": {
+      "year": "2023",
+      "manufacturer": "Porsche",
+      "model": "911",
+      "trim": "GT3 RS",
+      "verified": "contributor-confirmed in-game 2026-07-22"
+    },
+    "3402": {
+      "year": "2020",
+      "manufacturer": "Toyota",
+      "model": "GR Supra",
+      "trim": null,
+      "verified": "contributor-confirmed in-game 2026-07-22"
+    },
+    "2542": {
+      "year": "2017",
+      "manufacturer": "Alfa Romeo",
+      "model": "Giulia",
+      "trim": "Quadrifoglio",
+      "verified": "contributor-confirmed in-game 2026-07-22"
     }
   }
 }
