@@ -845,7 +845,9 @@
           label: document.getElementById("su_label").value.trim(),
           data: gatherForm(),
         }});
-        toast("Setup saved as " + res.label);
+        toast(res.created === false
+          ? "No change since " + res.label + " — copied it"
+          : "Setup saved as " + res.label);
         if (await copyReport("?setup_id=" + res.id)) closeSheet();
       } catch (err) { toast("Save failed: " + err.message); }
       btn.disabled = false;

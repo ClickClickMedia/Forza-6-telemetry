@@ -129,6 +129,41 @@ def test_engineering_prompt_has_causality_guardrail():
     assert "not which setting caused it" in md
 
 
+def test_create_setup_dedupes_unchanged_version(tmp_path: Path):
+    """Versions progress on change only: re-saving the current latest version
+    byte-for-byte reuses it instead of minting a duplicate (the Porsche v2
+    bug). A real change still mints the next version; key order is ignored."""
+    import asyncio
+    from types import SimpleNamespace
+    from app.main import app, create_setup, SetupBody
+
+    db = Database(tmp_path / "t.db")
+    app.state.fh6 = SimpleNamespace(db=db)
+    data = {"car_text": "2005 Porche Cayman GT3 WTAC",
+            "arb_f": "32", "arb_r": "63"}
+
+    r1 = asyncio.run(create_setup(SetupBody(car_ordinal=4232, data=dict(data))))
+    assert r1["created"] is True and r1["label"] == "v1"
+
+    # Identical re-save: no new version, the existing one is returned.
+    r2 = asyncio.run(create_setup(SetupBody(car_ordinal=4232, data=dict(data))))
+    assert r2["created"] is False
+    assert r2["id"] == r1["id"] and r2["label"] == "v1"
+    assert db.count_setups(4232) == 1
+
+    # A genuine change mints v2.
+    r3 = asyncio.run(create_setup(
+        SetupBody(car_ordinal=4232, data=dict(data, arb_r="60"))))
+    assert r3["created"] is True and r3["label"] == "v2"
+    assert db.count_setups(4232) == 2
+
+    # Key order must not matter — compared as parsed dicts, not JSON text.
+    reordered = {"arb_r": "60", "car_text": data["car_text"], "arb_f": "32"}
+    r4 = asyncio.run(create_setup(SetupBody(car_ordinal=4232, data=reordered)))
+    assert r4["created"] is False and db.count_setups(4232) == 2
+    db.close()
+
+
 def test_first_tune_mode_prompts_full_coordinated_setup():
     """First-tune mode asks for a complete one-shot coordinated tune, and is
     opt-in — the default and experiment prompts are unaffected."""

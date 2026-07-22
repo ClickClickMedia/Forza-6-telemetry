@@ -531,20 +531,34 @@ async def create_setup(body: SetupBody) -> Dict[str, Any]:
     import json as _json
     from datetime import datetime, timezone
     st = _state()
+    data = body.data or {}
+    # One identity store: a setup that names the car also registers it, so
+    # reports and session lists pick it up without a second step.
+    car_text = str(data.get("car_text") or "").strip()
+    if car_text and not st.db.get_car_name(body.car_ordinal):
+        st.db.set_car_name(body.car_ordinal, car_text)
+    # Versions progress on change only. An identical re-save of the current
+    # latest version is a no-op: reuse it rather than mint a duplicate. This
+    # guards the write at the source, so no caller (UI, MCP) can inflate the
+    # version count by re-copying an unchanged tune.
+    existing = st.db.list_setups(body.car_ordinal)  # newest first
+    if existing:
+        try:
+            latest_data = _json.loads(existing[0].get("data") or "{}")
+        except ValueError:
+            latest_data = {}
+        if latest_data == data:
+            return {"ok": True, "id": existing[0]["id"],
+                    "label": existing[0]["label"], "created": False}
     label = (body.label or "").strip()
     if not label:
         label = f"v{st.db.count_setups(body.car_ordinal) + 1}"
-    # One identity store: a setup that names the car also registers it, so
-    # reports and session lists pick it up without a second step.
-    car_text = str((body.data or {}).get("car_text") or "").strip()
-    if car_text and not st.db.get_car_name(body.car_ordinal):
-        st.db.set_car_name(body.car_ordinal, car_text)
     sid = st.db.add_setup(
         body.car_ordinal, label,
         datetime.now(timezone.utc).isoformat(),
-        _json.dumps(body.data or {}),
+        _json.dumps(data),
     )
-    return {"ok": True, "id": sid, "label": label}
+    return {"ok": True, "id": sid, "label": label, "created": True}
 
 
 # ---------------------------------------------------------------------------
