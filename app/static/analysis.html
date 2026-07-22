@@ -44,15 +44,12 @@
         </div>
         <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
         <div class="exportbar">
-          <button id="btnPackage" class="btn primary">📦 AI package (.zip)</button>
-          <button id="btnQuick" class="btn ghost">⚡ Quick analysis</button>
-          <button id="btnCopyData" class="btn ghost">Copy evidence</button>
+          <button id="btnPackage" class="btn primary">Set tune &amp; get report</button>
           <button id="btnFiles" class="btn ghost">Export files ▾</button>
         </div>
-        <p class="muted small" style="margin:6px 0 0;">The <b>AI package</b>
-          confirms your car &amp; tune, then bundles the full data as files —
-          the best hand-off. No AI runs in the tool; you paste into ChatGPT or
-          Claude.</p>
+        <p class="muted small" style="margin:6px 0 0;">Set your tune on the
+          dials, then <b>download the full data package</b> for ChatGPT or
+          Claude — or copy the report to your clipboard. No AI runs in the tool.</p>
       </div>
 
       <!-- Tuning verdicts -->
@@ -311,12 +308,14 @@
       </div>
     </div>
     <footer>
-      <button id="btnSavePackage" class="btn primary">📦 Save &amp; download AI package</button>
-      <button id="btnSaveCopy" class="btn">Save &amp; copy report</button>
+      <button id="btnSavePackage" class="btn primary">📦 Download package for AI analysis</button>
+      <button id="btnSaveCopy" class="btn">Copy report to clipboard</button>
     </footer>
   </div>
 
   <script src="/static/app.js"></script>
+  <script src="/static/wheel.js"></script>
+  <script src="/static/setup-wheels.js"></script>
   <script>
   (function () {
     "use strict";
@@ -805,11 +804,16 @@
       }
       sheet.classList.remove("hidden");
       backdrop.classList.remove("hidden");
+      requestAnimationFrame(() => {
+        const tg = parseInt(document.getElementById("topGear").textContent, 10);
+        FHSetupWheels.build();
+        FHSetupWheels.sync(isFinite(tg) ? tg : 0);
+      });
     }
 
     document.getElementById("savedSel").addEventListener("change", (e) => {
       const s = savedSetups[Number(e.target.value)];
-      if (s) fillForm(s.data);
+      if (s) { fillForm(s.data); FHSetupWheels.sync(); }
     });
     document.getElementById("btnCopySaved").addEventListener("click", async (e) => {
       const s = savedSetups[Number(document.getElementById("savedSel").value)];
@@ -858,9 +862,9 @@
       btn.disabled = false;
     });
 
-    // Two intents, two paths: quick analysis copies immediately (no setup
-    // needed — the AI locates problems from telemetry alone); engineering
-    // analysis opens the setup sheet because accuracy matters there.
+    // "Export files" is the power-user escape hatch (individual .md / .csv /
+    // .json / .zip). The primary path is the setup sheet: set the tune on the
+    // dials, then download the package or copy the report.
     const filesSheet = document.getElementById("filesSheet");
     function closeFiles() {
       filesSheet.classList.add("hidden");
@@ -873,11 +877,7 @@
     document.getElementById("filesClose").addEventListener("click", closeFiles);
     backdrop.addEventListener("click", closeFiles);
 
-    document.getElementById("btnQuick").addEventListener("click", (e) =>
-      copyReport("?mode=quick", e.currentTarget));
     document.getElementById("btnPackage").addEventListener("click", openSheet);
-    document.getElementById("btnCopyData").addEventListener("click", (e) =>
-      copyReport("?mode=data", e.currentTarget));
 
     window.addEventListener("resize", drawRoute);
 

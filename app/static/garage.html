@@ -16,12 +16,16 @@
       <button id="btnRefresh" class="btn small ghost">Refresh</button>
     </div>
     <p class="loadnote" style="margin:0 0 12px;">Every car you've driven, with
-      its best lap and saved tunes.</p>
+      its sessions and saved tunes.</p>
+
+    <input id="garageSearch" class="garage-search" type="search"
+      placeholder="Search cars — name, class or drivetrain…" autocomplete="off" />
 
     <div id="empty" class="notice hidden">
       No cars yet. Drive a car (or name one on the Analysis page) and it
       appears here.
     </div>
+    <div id="noMatch" class="notice hidden">No cars match that search.</div>
 
     <div id="list" class="session-list" aria-live="polite"></div>
 
@@ -32,7 +36,7 @@
   <script src="/static/app.js"></script>
   <script>
   (function () {
-    const { api, esc, fmt, fmtLapTime, fmtDate, toast } = FH;
+    const { api, esc, fmtDate, toast } = FH;
     FH.shell("garage");
 
     const DRIVE = { 0: "FWD", 1: "RWD", 2: "AWD" };
@@ -67,36 +71,51 @@
         ? c.tune_versions + " tune" + (c.tune_versions === 1 ? "" : "s")
         : "no saved tune";
       const sessions = c.session_count + " session" + (c.session_count === 1 ? "" : "s");
-      // A car with sessions links into Analysis (the per-car workspace);
-      // a name-only car (tuned but not yet driven) shows without the link.
-      const actions = c.session_count
-        ? '<div class="actions"><a class="btn small primary" href="/sessions?car=' + c.ordinal + '">View sessions</a></div>'
-        : "";
+      // "View sessions" filters the sessions list to this car; "View tune"
+      // opens Analysis for its latest session with the setup sheet, where the
+      // saved tunes live. A car needs a session to open Analysis.
+      const canTune = c.tune_versions > 0 && c.last_session_id != null;
+      const btns =
+        (c.session_count ? '<a class="btn small primary" href="/sessions?car=' + c.ordinal + '">View sessions</a>' : "") +
+        (canTune ? '<a class="btn small" href="/analysis?session=' + c.last_session_id + '&setupform=1">View tune</a>' : "");
       return '<article class="card session-card">' +
-        '<div class="title-row">' +
-          '<span class="name">' + esc(name) + "</span>" +
-          '<span class="pill amber">' + esc(fmtLapTime(c.best_lap)) + "</span>" +
-        "</div>" +
+        '<div class="title-row"><span class="name">' + esc(name) + "</span></div>" +
         '<div class="chips">' + chips(c) + "</div>" +
         '<div class="lapline">' +
           "<span>" + esc(sessions) + "</span>" +
           "<span>" + esc(tunes) + "</span>" +
           "<span>last driven " + esc(relDay(c.last_driven)) + "</span>" +
         "</div>" +
-        actions +
+        (btns ? '<div class="actions">' + btns + "</div>" : "") +
       "</article>";
     }
 
+    let allCars = [];
+    const noMatch = document.getElementById("noMatch");
+    const searchEl = document.getElementById("garageSearch");
+
+    // What a search query matches against: name, class, drivetrain, ordinal, PI.
+    function haystack(c) {
+      return [c.car_name || "", CLS[c.car_class] || "", DRIVE[c.drivetrain] || "",
+              "#" + c.ordinal, c.car_pi != null ? c.car_pi : ""]
+        .join(" ").toLowerCase();
+    }
+    function render() {
+      const q = (searchEl.value || "").trim().toLowerCase();
+      const rows = q ? allCars.filter((c) => haystack(c).includes(q)) : allCars;
+      empty.classList.toggle("hidden", allCars.length > 0);
+      noMatch.classList.toggle("hidden", !(allCars.length && rows.length === 0));
+      list.innerHTML = rows.map(card).join("");
+    }
     async function load() {
       try {
-        const r = await api("/api/garage");
-        const cars = r.cars || [];
-        empty.classList.toggle("hidden", cars.length > 0);
-        list.innerHTML = cars.map(card).join("");
+        allCars = (await api("/api/garage")).cars || [];
+        render();
       } catch (e) {
         toast("Failed to load garage: " + e.message);
       }
     }
+    searchEl.addEventListener("input", render);
     document.getElementById("btnRefresh").addEventListener("click", load);
     load();
   })();

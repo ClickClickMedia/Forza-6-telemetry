@@ -485,13 +485,12 @@
       icon: '<path d="M4 6h16M4 12h16M4 18h9"/>' },
     { href: "/garage", key: "garage", label: "Garage",
       icon: '<path d="M3 11l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M8 19v-5h8v5"/>' },
-    { href: "/coach", key: "coach", label: "Coach",
-      icon: '<path d="M12 3l7 4v5c0 4-3 7-7 8-4-1-7-4-7-8V7l7-4z"/><path d="M9.3 12l1.9 1.9 3.4-3.8"/>' },
     { href: "/analysis", key: "analysis", label: "Analysis",
       icon: '<path d="M4 5v14h16"/><path d="M7 15l3.5-5 3 3L18 7"/>' }
   ];
-  // Compare is reached from Sessions (pick two); Debug lives behind the
-  // connection status. Keeping the phone tab bar to five keeps it glanceable.
+  // Four tabs keep the phone bar glanceable. Compare is reached from Sessions
+  // (pick two); the Coach's read is a card on Analysis; Debug and the version
+  // live in the page footer (see appFooter).
 
   function shell(active, opts) {
     opts = opts || {};
@@ -521,6 +520,75 @@
       n.icon + "</svg><span>" + n.label + "</span></a>"
     ).join("");
     document.body.appendChild(tabs);
+    appFooter();
+  }
+
+  // ---------------------------------------------------- global page footer
+  // Version, the user-initiated update check, and a link to diagnostics.
+  // Sits at the foot of every page — always findable, never in the way. The
+  // version comes from /api/status (local); "Check for updates" is the one
+  // deliberate network call this tool makes.
+  function appFooter() {
+    const host = document.querySelector("main.page") || document.body;
+    const el = document.createElement("footer");
+    el.className = "appfoot";
+    el.innerHTML =
+      '<span class="af-brand">FH6 Telemetry</span>' +
+      '<span class="af-ver" id="appVer">·</span>' +
+      '<button type="button" class="linklike" id="appUpd">Check for updates</button>' +
+      '<a class="linklike" href="/debug">Diagnostics</a>';
+    host.appendChild(el);
+    api("/api/status").then((s) => {
+      if (s && s.version) document.getElementById("appVer").textContent = "v" + s.version;
+    }).catch(() => {});
+    el.querySelector("#appUpd").addEventListener("click", async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = "Checking…";
+      try {
+        const r = await api("/api/update-check", { method: "POST" });
+        if (!r.ok) toast(r.error || "Update check failed");
+        else if (r.update_available)
+          toast("Update available: v" + r.latest + " — open Diagnostics to download");
+        else toast("You're on the latest version (v" + r.current + ")");
+      } catch (err) { toast("Update check failed: " + err.message); }
+      b.disabled = false; b.textContent = "Check for updates";
+    });
+  }
+
+  // ------------------------------------------------- confirm modal (async)
+  // A styled stand-in for window.confirm for destructive actions.
+  //   FH.confirmModal({title, body, confirmLabel, danger}) -> Promise<bool>
+  function confirmModal(opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      const back = document.createElement("div");
+      back.className = "modal-backdrop";
+      back.innerHTML =
+        '<div class="modal" role="dialog" aria-modal="true" aria-label="' +
+        esc(opts.title || "Confirm") + '">' +
+        '<h2>' + esc(opts.title || "Are you sure?") + "</h2>" +
+        (opts.body ? '<p class="muted small">' + esc(opts.body) + "</p>" : "") +
+        '<div class="modal-actions">' +
+        '<button class="btn ghost" data-r="0">' + esc(opts.cancelLabel || "Cancel") + "</button>" +
+        '<button class="btn ' + (opts.danger ? "danger" : "primary") + '" data-r="1">' +
+        esc(opts.confirmLabel || "Confirm") + "</button>" +
+        "</div></div>";
+      document.body.appendChild(back);
+      const done = (v) => {
+        back.remove();
+        document.removeEventListener("keydown", onKey);
+        resolve(v);
+      };
+      const onKey = (e) => { if (e.key === "Escape") done(false); };
+      back.addEventListener("click", (e) => {
+        if (e.target === back) return done(false);
+        const b = e.target.closest("button[data-r]");
+        if (b) done(b.getAttribute("data-r") === "1");
+      });
+      document.addEventListener("keydown", onKey);
+      const c = back.querySelector('[data-r="1"]');
+      if (c) c.focus();
+    });
   }
 
   // --------------------------------------------------- coach's read card
@@ -570,6 +638,6 @@
     speedOut, tempOut, ema, emaArray,
     TEMP, tempClass, rampRGB, palette,
     prepCanvas, lineChart, routeChart, barChart, coachCard,
-    copyText, toast, shell, registerSW, fmtBytes
+    copyText, toast, shell, registerSW, fmtBytes, confirmModal
   };
 })();

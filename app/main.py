@@ -22,6 +22,7 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
@@ -294,6 +295,7 @@ async def update_check() -> Dict[str, Any]:
 
 @app.get("/api/status")
 async def api_status() -> Dict[str, Any]:
+    from . import __version__
     st = _state()
     now = time.monotonic()
     return {
@@ -301,6 +303,7 @@ async def api_status() -> Dict[str, Any]:
         "recording": st.recorder.status(),
         "push_hz": settings.push_hz,
         "synthetic": settings.synthetic,
+        "version": __version__,
     }
 
 
@@ -470,6 +473,9 @@ def _garage_aggregate(sessions, name_for, count_for, extra_named=None):
                 "session_count": 0, "best_lap": None,
                 "last_driven": s.get("created_at"),
                 "first_driven": s.get("created_at"),
+                # newest session (list is newest-first) — the entry point for
+                # "View tune": opens Analysis for this car with the setup sheet.
+                "last_session_id": s.get("id"),
             }
         g["session_count"] += 1
         bl = s.get("best_lap")
@@ -487,6 +493,7 @@ def _garage_aggregate(sessions, name_for, count_for, extra_named=None):
             "car_pi": None, "drivetrain": None, "cylinders": None,
             "session_count": 0, "best_lap": None,
             "last_driven": None, "first_driven": None,
+            "last_session_id": None,
         })
     for ordv, g in by_ordinal.items():
         g["tune_versions"] = count_for(ordv)
@@ -997,9 +1004,11 @@ async def page_garage() -> HTMLResponse:
     return _page("garage.html")
 
 
-@app.get("/coach", response_class=HTMLResponse)
-async def page_coach() -> HTMLResponse:
-    return _page("coach.html")
+@app.get("/coach")
+async def page_coach() -> RedirectResponse:
+    # The coach's read now lives as a card on the Analysis page; the
+    # standalone page is retired. Redirect any stale bookmark / PWA shortcut.
+    return RedirectResponse("/analysis", status_code=307)
 
 
 @app.get("/analysis", response_class=HTMLResponse)

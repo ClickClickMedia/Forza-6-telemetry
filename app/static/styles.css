@@ -517,48 +517,40 @@ footer.foot { text-align: center; color: var(--ink-mute); font-family: var(--mon
    SESSIONS PAGE — card list
    ========================================================================= */
 .session-list { display: grid; gap: 10px; }
-.session-card { display: grid; gap: 8px; }
-.session-card .title-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.session-card .name { font-weight: 800; font-size: 15px; color: var(--paint); overflow-wrap: anywhere; }
-.session-card .when { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
+.session-card { display: grid; gap: 7px; padding: 12px; }
+.session-card .title-row { display: flex; align-items: center; gap: 8px; }
+.session-card .name-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; cursor: pointer; }
+.session-card .name { font-weight: 800; font-size: 15px; color: var(--paint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-card .name-edit {
+  flex: none; background: none; border: none; cursor: pointer;
+  color: var(--ink-mute); font-size: 14px; line-height: 1; padding: 3px 4px;
+}
+.session-card .name-edit:hover { color: var(--amber); }
+.session-card .when { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.session-card .lapline { display: flex; gap: 16px; align-items: baseline; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.session-card .lapline { display: flex; gap: 14px; align-items: baseline; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
 .session-card .lapline span { white-space: nowrap; }
-.session-card .lapline b { color: var(--amber); font-size: 16px; }
-.session-card .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.session-card .lapline b { color: var(--amber); font-size: 15px; }
+.session-card .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.session-card .actions .grow { flex: 1; }
 
-/* export menu (details/summary based, no JS dependency) */
-details.exporter { position: relative; }
-details.exporter > summary { list-style: none; cursor: pointer; }
-details.exporter > summary::-webkit-details-marker { display: none; }
-details.exporter > .menu {
-  position: absolute;
-  left: 0; top: calc(100% + 6px);
-  background: var(--carbon-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-s);
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 32px));
-  z-index: 35;
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+/* notes as a click-to-edit field (button at rest, textarea while editing) */
+.note-field {
+  display: block; width: 100%; text-align: left; cursor: text;
+  background: var(--asphalt-2); border: 1px dashed var(--line);
+  border-radius: var(--radius-s); padding: 7px 10px; color: var(--paint);
+  font-family: var(--sans); font-size: 12.5px; line-height: 1.45;
+  overflow-wrap: anywhere;
 }
-details.exporter > .menu a, details.exporter > .menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none; border: none;
-  color: var(--paint);
-  font-size: 13px; font-weight: 600;
-  font-family: var(--sans);
-  padding: 9px 10px;
-  border-radius: 7px;
-  cursor: pointer;
+.note-field:hover { border-color: var(--ink-mute); }
+.note-field.empty { color: var(--ink-mute); font-style: italic; }
+.note-edit {
+  display: block; width: 100%; box-sizing: border-box;
+  background: var(--asphalt-2); border: 1px solid var(--amber);
+  border-radius: var(--radius-s); padding: 7px 10px; color: var(--paint);
+  font-family: var(--sans); font-size: 12.5px; line-height: 1.45;
+  resize: vertical; outline: none;
 }
-details.exporter > .menu a:hover, details.exporter > .menu button:hover { background: var(--carbon); text-decoration: none; }
-details.exporter > .menu .hint { font-size: 10px; color: var(--ink-mute); font-family: var(--mono); padding: 0 10px 6px; }
 
 /* =========================================================================
    ANALYSIS PAGE
@@ -703,3 +695,100 @@ details.exporter > .menu .hint { font-size: 10px; color: var(--ink-mute); font-f
 .coach-tag.tag-you { color: var(--cold); }
 .coach-tag.tag-car { color: var(--amber); }
 .coach-tag.tag-both { color: var(--over); }
+
+/* --- thumb-wheel value picker (wheel.js) ------------------------------------ */
+.wheel {
+  position: relative; height: 56px; margin-top: 3px;
+  background: var(--asphalt-2); border: 1px solid var(--line);
+  border-radius: var(--radius-s); overflow: hidden;
+  touch-action: none; -webkit-user-select: none; user-select: none; cursor: grab;
+}
+.wheel.dragging { cursor: grabbing; }
+.wh-track { position: absolute; inset: 0; }
+.wh-t {
+  position: absolute; top: 50%; width: 1px; height: 11px; margin-top: -9px;
+  background: var(--ink-mute); opacity: .5;
+}
+.wh-t.maj { height: 18px; margin-top: -13px; opacity: .85; }
+.wh-t.oob { opacity: .1; }
+.wh-t > b {
+  position: absolute; top: 21px; left: 0; transform: translateX(-50%);
+  font: 700 10px var(--mono); color: var(--ink-dim);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.wh-needle {
+  position: absolute; left: 50%; top: 5px; height: 22px; width: 2px;
+  margin-left: -1px; background: var(--amber); border-radius: 1px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber) 60%, transparent);
+  pointer-events: none;
+}
+.wh-val, .wh-type {
+  position: absolute; top: 5px; right: 6px;
+  font: 800 15px var(--mono); font-variant-numeric: tabular-nums;
+  color: var(--paint);
+  background: color-mix(in srgb, var(--asphalt) 78%, transparent);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px;
+  min-width: 3.2ch; text-align: right;
+}
+.wh-val { cursor: text; }
+.wh-type { width: 6ch; outline: none; }
+/* gears: N per-gear wheels + a count stepper */
+.gears { grid-column: 1 / -1; }
+.gears-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.gears-count { display: flex; align-items: center; gap: 12px; font-family: var(--mono); }
+.gears-count b { min-width: 1.4ch; text-align: center; color: var(--paint); font-size: 16px; }
+.gc { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--carbon-2); color: var(--paint); font-size: 20px; line-height: 1; }
+.gear-rows { display: flex; flex-direction: column; gap: 8px; }
+.gear-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 10px; }
+.gear-row .eyebrow { text-align: right; }
+
+/* =========================================================================
+   GLOBAL PAGE FOOTER — version · update check · diagnostics
+   ========================================================================= */
+.appfoot {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: center; gap: 6px 14px;
+  margin-top: 22px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
+  color: var(--ink-mute);
+}
+.appfoot .af-brand { color: var(--ink-dim); font-weight: 700; letter-spacing: .1em; }
+.appfoot .af-ver { color: var(--ink-mute); }
+.linklike {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--amber); text-decoration: none;
+}
+.linklike:hover { text-decoration: underline; }
+.linklike:disabled { color: var(--ink-mute); cursor: default; text-decoration: none; }
+
+/* =========================================================================
+   CONFIRM MODAL (FH.confirmModal)
+   ========================================================================= */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: color-mix(in srgb, #000 62%, transparent);
+  backdrop-filter: blur(3px);
+}
+.modal {
+  width: min(420px, 100%);
+  background: var(--carbon); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+.modal h2 { font-size: 16px; margin: 0 0 8px; }
+.modal p { margin: 0 0 16px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* =========================================================================
+   GARAGE — search box
+   ========================================================================= */
+.garage-search {
+  width: 100%; box-sizing: border-box; margin: 0 0 12px;
+  background: var(--asphalt-2); border: 1px solid var(--line);
+  border-radius: var(--radius-s); padding: 10px 12px;
+  color: var(--paint); font-family: var(--sans); font-size: 14px; outline: none;
+}
+.garage-search:focus { border-color: var(--ink-mute); }
+.garage-search::placeholder { color: var(--ink-mute); }

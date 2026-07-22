@@ -16,6 +16,7 @@
       <div class="btnrow">
         <a id="showAll" class="btn small ghost hidden" href="/sessions">Show all</a>
         <button id="btnCompare" class="btn small" disabled>Compare (0/2)</button>
+        <button id="btnClearAll" class="btn small ghost" style="color:var(--over)">Clear all</button>
         <button id="btnRefresh" class="btn small ghost">Refresh</button>
       </div>
     </div>
@@ -28,7 +29,7 @@
 
     <div id="list" class="session-list" aria-live="polite"></div>
 
-    <footer class="foot">Recordings stay on this machine · CSV / Markdown export</footer>
+    <footer class="foot">Recordings stay on this machine · open a session in Analysis to export or hand off to AI</footer>
   </main>
 
   <script src="/static/app.js"></script>
@@ -63,13 +64,24 @@
       return (new Date(s.ended_at) - new Date(s.created_at)) / 1000;
     }
 
+    // A note shows as a click-to-edit field: a button at rest, swapped for a
+    // textarea on tap (see the click handler). data-note carries the raw text.
+    function noteFieldHTML(id, note) {
+      return '<button type="button" class="note-field' + (note ? "" : " empty") +
+        '" data-act="notes" data-id="' + id + '" data-note="' + esc(note || "") + '">' +
+        (note ? esc(note) : "add a note — track, tune, what you tested") + "</button>";
+    }
+
     function card(s) {
       const dur = duration(s);
+      const name = s.name || ("Session " + s.id);
       return '<article class="card session-card" data-id="' + s.id + '">' +
         '<div class="title-row">' +
-          '<label class="nowrap" style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+          '<label class="name-wrap">' +
             '<input type="checkbox" data-cmp="' + s.id + '"' + (compareSel.has(s.id) ? " checked" : "") + ">" +
-            '<span class="name">' + esc(s.name || ("Session " + s.id)) + "</span></label>" +
+            '<span class="name">' + esc(name) + "</span></label>" +
+          '<button class="name-edit" data-act="rename" data-id="' + s.id +
+            '" data-name="' + esc(name) + '" title="Rename" aria-label="Rename session">✎</button>' +
           '<span class="when">' + esc(fmtDate(s.created_at)) + "</span>" +
         "</div>" +
         '<div class="chips">' + chips(s) + "</div>" +
@@ -79,21 +91,9 @@
           "<span>" + esc(fmt(s.frame_count, 0)) + " frames</span>" +
           (s.raw_bytes ? "<span>" + esc(FH.fmtBytes(s.raw_bytes)) + "</span>" : "") +
         "</div>" +
-        (s.notes ? '<div class="small muted">' + esc(s.notes) + "</div>" : "") +
+        noteFieldHTML(s.id, s.notes) +
         '<div class="actions">' +
-          '<a class="btn small primary" href="/analysis?session=' + s.id + '">Analysis</a>' +
-          '<details class="exporter"><summary class="btn small">Export ▾</summary>' +
-            '<div class="menu">' +
-              '<div class="hint">FOR AI TUNING</div>' +
-              '<a href="/analysis?session=' + s.id + '&setupform=1">Copy for AI + my setup…</a>' +
-              '<button data-act="copyai" data-id="' + s.id + '">Copy data only for AI</button>' +
-              '<a href="/api/sessions/' + s.id + '/tuning.md?download=1">Download tuning report (.md)</a>' +
-              '<div class="hint">DATA</div>' +
-              '<a href="/api/sessions/' + s.id + '/laps.csv">Per-lap summary (.csv)</a>' +
-              '<a href="/api/sessions/' + s.id + '/download.csv">Raw frames (.csv)</a>' +
-            "</div></details>" +
-          '<button class="btn small ghost" data-act="rename" data-id="' + s.id + '">Rename</button>' +
-          '<button class="btn small ghost" data-act="notes" data-id="' + s.id + '">Notes</button>' +
+          '<a class="btn small primary grow" href="/analysis?session=' + s.id + '">Analysis</a>' +
           '<button class="btn small ghost" data-act="delete" data-id="' + s.id + '" style="color:var(--over)">Delete</button>' +
         "</div>" +
       "</article>";
@@ -143,40 +143,59 @@
     });
 
     listEl.addEventListener("click", async (e) => {
-      const btn = e.target.closest("button[data-act]");
+      const btn = e.target.closest("[data-act]");
       if (!btn) return;
       const id = Number(btn.getAttribute("data-id"));
       const act = btn.getAttribute("data-act");
-      try {
-        if (act === "copyai") {
-          btn.disabled = true;
-          const md = await api("/api/sessions/" + id + "/tuning.md?mode=data");
-          const ok = await FH.copyText(md);
-          toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
-                   : "Copy failed — use Download instead");
-          btn.disabled = false;
-          btn.closest("details").removeAttribute("open");
-        } else if (act === "rename") {
-          const name = prompt("New session name:");
-          if (name === null) return;
+
+      if (act === "rename") {
+        const name = prompt("Session name:", btn.getAttribute("data-name") || "");
+        if (name === null) return;
+        try {
           await api("/api/sessions/" + id, { method: "PATCH", json: { name } });
           load();
-        } else if (act === "notes") {
-          const cur = await api("/api/sessions/" + id);
-          const notes = prompt("Notes (car, track, tune, what you were testing):", cur.notes || "");
-          if (notes === null) return;
-          await api("/api/sessions/" + id, { method: "PATCH", json: { notes } });
-          toast("Notes saved");
-          load();
-        } else if (act === "delete") {
-          if (!confirm("Delete this session and its raw file permanently?")) return;
+        } catch (err) { toast("Rename failed: " + err.message); }
+        return;
+      }
+      if (act === "notes") { editNote(btn, id); return; }
+      if (act === "delete") {
+        if (!confirm("Delete this session and its raw file permanently?")) return;
+        try {
           await api("/api/sessions/" + id, { method: "DELETE" });
           compareSel.delete(id);
           toast("Session deleted");
           load();
-        }
-      } catch (err) { toast("Action failed: " + err.message); }
+        } catch (err) { toast("Delete failed: " + err.message); }
+      }
     });
+
+    // Click-to-edit note: swap the field for a textarea, save on blur / Enter
+    // (Shift+Enter for a newline), Escape to cancel. No full reload — just
+    // this one field is replaced, so the scroll position is kept.
+    function editNote(fieldEl, id) {
+      const cur = fieldEl.getAttribute("data-note") || "";
+      const ta = document.createElement("textarea");
+      ta.className = "note-edit"; ta.rows = 2; ta.value = cur;
+      ta.placeholder = "Car, track, tune, what you were testing…";
+      fieldEl.replaceWith(ta); ta.focus();
+      const restore = (note) => { ta.outerHTML = noteFieldHTML(id, note); };
+      let closed = false;
+      const save = async () => {
+        if (closed) return; closed = true;
+        const notes = ta.value.trim();
+        if (notes === cur) { restore(notes); return; }
+        try {
+          await api("/api/sessions/" + id, { method: "PATCH", json: { notes } });
+          toast(notes ? "Note saved" : "Note cleared");
+        } catch (err) { toast("Save failed: " + err.message); }
+        restore(notes);
+      };
+      ta.addEventListener("blur", save);
+      ta.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") { closed = true; restore(cur); }
+        else if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); ta.blur(); }
+      });
+    }
 
     document.getElementById("btnCompare").addEventListener("click", () => {
       if (compareSel.size !== 2) return;
@@ -185,11 +204,22 @@
     });
     document.getElementById("btnRefresh").addEventListener("click", load);
 
-    // Close any open export menu when tapping elsewhere.
-    document.addEventListener("click", (e) => {
-      document.querySelectorAll("details.exporter[open]").forEach((d) => {
-        if (!d.contains(e.target)) d.removeAttribute("open");
+    document.getElementById("btnClearAll").addEventListener("click", async () => {
+      const ok = await FH.confirmModal({
+        title: "Delete all sessions?",
+        body: "This permanently removes every recorded session and its raw file " +
+              "from this machine. Saved tunes and car names are kept. This can't " +
+              "be undone.",
+        confirmLabel: "Delete all", danger: true,
       });
+      if (!ok) return;
+      try {
+        const r = await api("/api/sessions", { method: "DELETE" });
+        compareSel.clear();
+        toast("Deleted " + (r.deleted || 0) + " session" +
+              (r.deleted === 1 ? "" : "s") + " · freed " + FH.fmtBytes(r.freed_bytes || 0));
+        load();
+      } catch (err) { toast("Clear all failed: " + err.message); }
     });
 
     load();
