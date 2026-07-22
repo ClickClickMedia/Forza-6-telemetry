@@ -114,6 +114,10 @@ setting values.**
    - **Engineering brief** — includes your saved tune (stored per car,
      last version pre-loaded, edit the one or two values you changed) plus
      the **changes since the previous revision**, discipline and assists.
+     A **Report goal** toggle sets what you want from it: *Tune advice*
+     (scaled to the evidence), *First tune* (a complete one-shot setup for
+     a new car), or *Experiment* (one bold, reversible single-variable test
+     to learn the most from the next run).
    This is a **separate step you choose to do** — the copy lands on your
    clipboard, and *you* paste it into Claude or ChatGPT. No AI runs inside
    the tool. Whatever an AI then suggests is on you to judge; it can spit
@@ -193,6 +197,20 @@ setup values you fill into the report.
   a drift-aware understeer index, per-axle slide times, wheelspin and
   brake-lock events, suspension travel and bottom-outs, shift RPM and
   time-on-limiter.
+- **Diagnostic depth** — the report reads the story behind the averages: a
+  **grip-deficit** flag when both axles are past the limit (with the
+  understeer index correctly called *not a tuning target*), a
+  **balance-oscillation rate** (how often the limiting axle flips — what a
+  "nervous/psychotic" car actually is), slide time **split by throttle
+  state** (power-on wheelspin vs off-throttle slide need opposite fixes),
+  front/rear slide overlap, tyre-temperature **trend** (warming / steady /
+  runaway), squat/dive/roll body-control, and steering-lock saturation.
+- **Garage** — a tab listing every car you've driven or named, with its
+  session count, saved tune versions, best lap and when you last drove it.
+- **Never fabricates** — every number is labelled telemetry / estimated /
+  user-entered; the report says plainly what Forza's Data Out does *not*
+  broadcast (tyre pressures, weather, per-tyre-zone temps, slider ranges)
+  and never invents it.
 - **Corner-by-corner section evidence** — every cornering event classified
   by shape (hairpin, turn, sweeper, chicane/transfer, straight, launch)
   with entry/min/exit speeds, slip, throttle-reapplication and wheelspin
@@ -275,6 +293,7 @@ this cross-check live; if it ever fails on your setup,
 | --- | --- |
 | `/` | Live dashboard |
 | `/sessions` | Session list, rename, notes, exports, delete |
+| `/garage` | Every car you've driven or named — sessions, tunes, best lap |
 | `/analysis?session=ID` | Verdicts, laps, route trace, per-session analysis |
 | `/compare` | Two-session comparison + overlaid route |
 | `/debug` | Live parsed packet field table + physics check |
@@ -290,7 +309,8 @@ this cross-check live; if it ever fails on your setup,
 | DELETE | `/api/sessions/{id}` | Delete session + raw file |
 | GET | `/api/sessions/{id}/analysis` | Full analysis |
 | GET | `/api/sessions/{id}/laps` | Lap breakdown + tuning aggregates + verdicts |
-| GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data`, `?style=compact`, `?setup_id=N`, `?download=1`) |
+| GET | `/api/garage` | Per-car rollup (sessions, tune versions, best lap) |
+| GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data\|experiment\|first_tune`, `?style=compact`, `?setup_id=N`, `?download=1`) |
 | GET | `/api/sessions/{id}/sections.json` | Structured corner-section evidence |
 | GET | `/api/sessions/{id}/package.zip` | Full session bundle (report, CSVs, sections, metadata, setup) |
 | GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |
