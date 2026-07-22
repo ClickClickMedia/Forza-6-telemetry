@@ -68,9 +68,11 @@ snap oversteer, a cooking rear axle, and half a second of lap time. The
 telemetry supported **one** lever; changing everything imported assumptions
 the evidence never made.
 
-That is the failure mode first-tune mode is built to prevent. It asks for a
-disposition per subsystem — **CHANGE / RETAIN / CANNOT ASSESS / RANGE
-REQUIRED** — makes "RETAIN the rest" a first-class answer, and tells the AI
-to drop any change the report shows no failure mode for. The evidence you
-copy is bounded to *this* car, *this* session — which is exactly what keeps
-a broad, confident, wrong tune from happening.
+That is the failure mode first-tune mode is built to prevent. The prompt
+keeps it to one plain line — *change what the evidence supports and leave
+the rest; a strong tune isn't a changed-everything tune* — and trusts a
+capable model to do the reasoning. (Earlier versions spelled out a verdict
+for every subsystem; that made the AI thorough but timid, so it was cut.)
+What actually keeps a broad, confident, wrong tune from happening is that
+the evidence you copy is bounded to *this* car, *this* session — the table
+above is how a good read looks, not a format the prompt dictates.

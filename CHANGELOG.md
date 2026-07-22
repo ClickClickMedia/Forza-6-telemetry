@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.9.0] - 2026-07-22
+
+### Changed — lean AI prompts (less is more)
+The baked prompts in the copy/export functions are stripped back to a lean
+expert-tuner ask: *"You are an expert Forza Horizon 6 tuner. Review the
+telemetry evidence above and give a competitive tune..."* Over several
+versions we had layered method into these prompts — evidence-precedence
+lists, subsystem-disposition machinery, contradiction checks, cross-car
+transfer bans, don't-assume caveats. In practice that made tune advice
+**worse**, not better: capable models produced timid, checklist-satisfying
+answers instead of a sharp competitive tune. The wall is gone.
+
+One rail survives, because it protects the tool's whole reason to exist:
+the AI is told the data is real telemetry with **no tyre-pressure channel,
+one temperature per tyre and unknown slider ranges**, so it can't invent
+readings. Everything else — how to weigh the numbers — is left to the model.
+The honest framing that mattered (grip-deficit banner, provenance notes,
+saturation flags) was never in the prompt anyway: it lives in the rendered
+**evidence**, so the AI still sees the truth regardless of the prompt.
+
 ## [2.8.0] - 2026-07-22
 
 ### Added — Driving Coach (local, deterministic)

@@ -122,13 +122,6 @@ def test_setup_supplied_three_states():
     assert "Setup supplied: no" in md4
 
 
-def test_engineering_prompt_has_causality_guardrail():
-    sd = _synthetic_session(seconds=30.0)
-    md = build_markdown(sd, META, "2.3.2")
-    assert "several tune settings changed at once" in md
-    assert "not which setting caused it" in md
-
-
 def test_create_setup_dedupes_unchanged_version(tmp_path: Path):
     """Versions progress on change only: re-saving the current latest version
     byte-for-byte reuses it instead of minting a duplicate (the Porsche v2
@@ -164,30 +157,32 @@ def test_create_setup_dedupes_unchanged_version(tmp_path: Path):
     db.close()
 
 
-def test_first_tune_mode_prompts_full_coordinated_setup():
-    """First-tune mode asks for a complete one-shot coordinated tune, and is
-    opt-in — the default and experiment prompts are unaffected."""
+def test_lean_prompts_are_expert_tuner_not_method_walls():
+    """The baked prompts are lean: an expert-tuner ask, not a wall of
+    do's/don'ts. Layering method into the copy prompts made tunes worse."""
+    sd = _synthetic_session(seconds=30.0)
+    default = " ".join(build_markdown(sd, META, "2.9.0",
+                       setup={"label": "v", "data": {}}).split())
+    assert "expert Forza Horizon 6 tuner" in default
+    assert "competitive tune" in default
+    # The removed method walls must be gone.
+    for gone in ("balance index is not a tuning target",
+                 "do not assume headroom", "several tune settings changed",
+                 "not evidence for this one", "CANNOT ASSESS"):
+        assert gone not in default, gone
+
+
+def test_first_tune_mode_asks_for_competitive_complete_tune():
+    """First-tune is opt-in and lean: a competitive complete tune that keeps
+    the one hard-won kernel — don't change everything."""
     sd = _synthetic_session(seconds=30.0)
     setup = {"label": "v1", "data": {"arb_f": "20"}}
-    md = build_markdown(sd, META, "2.6.0", setup=setup, variant="first_tune")
-    flat = " ".join(md.split())
-    assert "complete one-shot tune" in flat
-    assert "not a cautious single change" in flat
-    # It keeps the honesty rails.
-    assert "you do not know each slider" in flat.lower()
-    # Default and experiment stay distinct.
-    default = build_markdown(sd, META, "2.6.0", setup=setup)
-    assert "complete one-shot tune" not in default
-
-
-def test_prompt_carries_saturation_and_throttle_guidance():
-    sd = _synthetic_session(seconds=30.0)
-    md = build_markdown(sd, META, "2.6.0", setup={"label": "v", "data": {}})
-    low = " ".join(md.lower().split())  # collapse prompt line-wraps
-    assert "the balance index is not a tuning target" in low
-    assert "power-on wheelspin and off-throttle lateral slide" in low
-    assert "read tyre-temperature trend, not just the peak" in low
-    assert "do not assume headroom" in low
+    flat = " ".join(build_markdown(sd, META, "2.9.0", setup=setup,
+                                   variant="first_tune").split())
+    assert "competitive complete tune" in flat
+    assert "leave the rest" in flat  # the anti-change-everything kernel
+    default = " ".join(build_markdown(sd, META, "2.9.0", setup=setup).split())
+    assert "competitive complete tune" not in default
 
 
 def test_new_session_metrics_present():
@@ -236,42 +231,21 @@ def test_sessions_for_car_excludes_later_runs(tmp_path: Path):
     db.close()
 
 
-def test_first_tune_requires_subsystem_dispositions():
-    """First-tune 'complete' means a verdict per subsystem, not
-    change-everything — the direct fix for the Cayman over-tune."""
-    sd = _synthetic_session(seconds=30.0)
-    md = build_markdown(sd, META, "2.7.0", setup={"label": "v", "data": {}},
-                        variant="first_tune")
-    flat = " ".join(md.split())
-    for verdict in ("CHANGE", "RETAIN", "CANNOT ASSESS", "RANGE REQUIRED"):
-        assert verdict in flat, verdict
-    assert "that every value must move" in flat
-    assert "changing everything to look thorough is the failure mode" in flat
-    # The contradiction check rides along in first-tune too.
-    assert "leave that subsystem alone" in flat
-
-
-def test_universal_rails_forbid_cross_car_transfer():
-    """Every analysis mode carries the cross-car transfer ban — the antidote
-    to a long chat importing another car's tune (the context-rot failure)."""
+def test_honesty_rail_present_in_every_tune_mode():
+    """The one surviving rail: every analysis mode still tells the AI the
+    data is real telemetry with no pressure channel and unknown slider
+    ranges, so it doesn't invent numbers. A data-only export has no prompt."""
     sd = _synthetic_session(seconds=30.0)
     setup = {"label": "v", "data": {}}
     for variant in ("full", "first_tune", "experiment", "quick"):
-        low = " ".join(build_markdown(sd, META, "2.7.0", setup=setup,
+        low = " ".join(build_markdown(sd, META, "2.9.0", setup=setup,
                                       variant=variant).lower().split())
-        assert "not evidence for this one" in low, variant
-        assert "the current session wins" in low, variant
-    # A data-only export makes no request for analysis — no prompt, no rails.
-    d = build_markdown(sd, META, "2.7.0", setup=None, variant="data")
-    assert "not evidence for this one" not in d.lower()
-
-
-def test_default_prompt_carries_contradiction_check():
-    sd = _synthetic_session(seconds=30.0)
-    low = " ".join(build_markdown(sd, META, "2.7.0",
-                   setup={"label": "v", "data": {}}).lower().split())
-    assert "no brake change without a braking fault" in low
-    assert "no suspension change when body control reads healthy" in low
+        assert "no tyre-pressure channel" in low, variant
+        assert "don't invent numbers it doesn't contain" in low, variant
+    # The evidence section has its own pressure-provenance note, so check a
+    # rail-unique phrase to confirm the data-only export carries no prompt.
+    d = build_markdown(sd, META, "2.9.0", setup=None, variant="data")
+    assert "don't invent numbers it doesn't contain" not in d.lower()
 
 
 def test_experiment_mode_prompts_bold_single_variable():
@@ -286,20 +260,10 @@ def test_experiment_mode_prompts_bold_single_variable():
     assert "pass/fail rule" in md
     # It must NOT carry the default tune-advice prompt's proportional line.
     assert "Scale the intervention" not in md
-    # The default engineering export keeps its evidence-scaled framing.
-    default = build_markdown(sd, META, "2.4.1", setup=setup)
-    assert "intervention scaled to the evidence" in default
+    # The default (lean) export is the expert-tuner ask, not the experiment.
+    default = build_markdown(sd, META, "2.9.0", setup=setup)
+    assert "expert Forza Horizon 6 tuner" in default
     assert "decisive, reversible tuning experiment" not in default
-
-
-def test_default_prompt_allows_labelled_vehicle_context():
-    """Safe kernel of the 'research the car' idea: general real-world
-    context is allowed, but browsing/FH6-fact fabrication is forbidden."""
-    sd = _synthetic_session(seconds=30.0)
-    md = build_markdown(sd, META, "2.4.1", setup={"label": "v1", "data": {}})
-    assert "real-world layout and" in md
-    assert "do not invent Forza-specific facts" in md
-    assert "researched anything" in md
 
 
 def test_section_scope_statement():

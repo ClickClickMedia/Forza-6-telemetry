@@ -25,107 +25,30 @@ CAR_CLASS = {0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "X"}
 DRIVETRAIN = {0: "FWD", 1: "RWD", 2: "AWD"}
 
 AI_PROMPT = """\
-Analyse the telemetry evidence above together with the analysis context,
-driver note (if any), setup values and tune lineage. This export is
-evidence, not a diagnosis — the interpretation is yours.
-
-Prioritise:
-1. Lap time and like-for-like comparisons (same route, discipline and
-   conditions).
-2. The driver's described problem area.
-3. Behaviour by section type: hairpin, turn, sweeper, transfer, straight.
-4. The representative section samples, not only session-wide averages.
-5. An intervention scaled to the evidence: a coordinated multi-setting
-   tune when the telemetry shows a fundamental imbalance (e.g. one axle
-   far past its grip limit while the other is underused), a single
-   targeted change when the car is already close. Say which case applies.
-
-Do not assume a lower understeer index is automatically faster.
-Do not recommend changes from session-wide averages alone.
-Distinguish circuit, touge, dirt and other disciplines from the evidence.
-Treat wet, night or rewind-affected running separately where declared.
-Separate driver observations from setup hypotheses — recommend a setup
-change only when the telemetry supports it independently of likely
-driver variation.
-When several tune settings changed at once, a faster result proves the
-WHOLE tune was faster, not which setting caused it. Keep three things
-separate: the measured outcome, the evidence-consistent explanation, and
-any single-setting causal claim (which stays a hypothesis unless the
-sessions isolate that one variable).
-"No setup change recommended" is a valid answer when evidence is weak,
-the clock is improving, or driver variance dominates — prefer "collect
-more evidence" over speculative tuning.
-You may use general knowledge of the car's real-world layout and
-drivetrain as clearly-labelled context (e.g. "an AWD conversion of a
-rear-drive platform"), but do not invent Forza-specific facts — installed
-upgrades, in-game tuning ranges, or "meta" tunes — and never let context
-override the measured telemetry. If you lack live web access, do not claim
-to have researched anything; reason from the telemetry and say so.
-When both axles are flagged past the grip limit, the balance index is not
-a tuning target — say so and look to the build (tyres/power). Treat
-power-on wheelspin and off-throttle lateral slide as separate problems
-with different levers. Read tyre-temperature TREND, not just the peak.
-You do not know each slider's min/max range for this car (Forza does not
-broadcast it) — do not assume headroom in either direction; if a change
-would need to exceed a plausible range, flag it "if the slider allows".
-Before finalising any change, check it against the evidence and drop it if
-the report shows no matching failure mode: no brake change without a
-braking fault, no alignment change without tyre evidence, no gearing change
-without gear/speed evidence, no suspension change when body control reads
-healthy.
-Never invent data this export does not contain.
+You are an expert Forza Horizon 6 tuner. Review the telemetry evidence
+above and give a competitive tune: the changes you'd make, in priority
+order, and briefly why each one. Match the intervention to the evidence —
+a coordinated set of changes if the car is fundamentally off, one sharp
+change if it's already close.
 """
 
-# Appended to every analysis prompt (all modes). The distilled kernel of a
-# stable evidence contract: precedence + the cross-car transfer ban that
-# stops a model with long chat history importing another car's tune.
+# Appended to every analysis prompt (all modes). The one load-bearing rail:
+# the tool's whole promise is honest evidence, so the AI must not invent
+# readings the game never broadcasts. Everything else — how to weigh the
+# numbers — is left to the model; layering method here made tune advice
+# worse, not better (observed across real tunes, 2026-07).
 UNIVERSAL_RAILS = """\
-Evidence precedence: this session's telemetry first, then matched previous
-sessions of THIS car, then the setup shown, then general vehicle dynamics.
-Do NOT carry tune values, preferred ratios or car-specific conclusions over
-from another vehicle or an earlier conversation — a setting that helped a
-different car is not evidence for this one. Where prior patterns and the
-current telemetry disagree, the current session wins.
+This is real telemetry from Forza's Data Out: there is no tyre-pressure
+channel, one temperature per tyre, and the in-game slider ranges are
+unknown. Work from what's here — don't invent numbers it doesn't contain.
 """
 
 FIRSTTUNE_PROMPT = """\
-Produce a complete one-shot tune for this car — a full baseline, not a
-cautious single change. This is the "first tune" objective: the car is new
-or far from sorted, so coordinated changes are on the table.
-
-"Complete" means every tunable subsystem gets a disposition, NOT that every
-value must move. For each of tyres, gearing, alignment, anti-roll bars,
-springs, ride height, damping, aero, differential and brakes, give exactly
-one verdict:
-- CHANGE — a concrete target value (from the current setup shown) and the
-  telemetry behind it;
-- RETAIN — keep the current value, with the evidence for leaving it;
-- CANNOT ASSESS — the channels needed aren't in this export;
-- RANGE REQUIRED — a change is warranted, but the exact target needs the
-  in-game slider bounds, which Forza does not broadcast.
-A tune that moves one subsystem and explicitly RETAINS the rest is a
-complete, valid answer — changing everything to look thorough is the
-failure mode, not the goal. Order the CHANGE items most-impactful first.
-Judge the result by repeatable matched pace, usable throttle and stability
-— not by neutrality alone, and not by a lower understeer index.
-
-Before you finalise, test every CHANGE against the evidence and drop any
-that fails: does the body-control evidence actually show a suspension
-problem? the braking evidence a brake fault? the gear/speed evidence a
-gearing problem? the available tyre evidence support an alignment move? If
-the report does not show the failure mode, leave that subsystem alone.
-
-Ground rules that still hold:
-- If both axles are flagged past the grip limit, say plainly that the
-  ceiling is the BUILD (tyre compound/width, then power) and that the tune
-  can only calm the car, not add grip.
-- Separate power-on wheelspin (diff/throttle/gearing) from off-throttle
-  lateral slide (alignment/ARB/decel-diff) — they need different levers.
-- You do not know each slider's min/max range; do not assume headroom, and
-  flag any change that may exceed a plausible range.
-- Because many settings move at once, a faster result proves the WHOLE
-  tune worked, not which setting did — say so.
-Never invent data this export does not contain.
+You are an expert Forza Horizon 6 tuner and this car is new or far from
+sorted. Give a competitive complete tune from the evidence above — the
+settings you'd change, in priority order, and briefly why each one. Change
+what the evidence supports and leave the rest; a strong tune isn't a
+changed-everything tune.
 """
 
 EXPERIMENT_PROMPT = """\
