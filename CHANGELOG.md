@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.13.0] - 2026-07-22
+
+### Changed — mobile UX tidy-up
+A pass over the phone experience, keeping the warm-black/amber instrument look:
+- **Bottom nav trimmed from seven tabs to five** (Live / Sessions / Garage /
+  Coach / Analysis). Compare is reached from Sessions (pick two); Debug from
+  the connection status. Five stays glanceable on a phone.
+- **Garage "View sessions" now filters to that car** — the title swaps to the
+  car name with a "Show all" escape, instead of opening the full session list.
+- **On-brand copy** — two footers that leaked internal file names ("argue in
+  app/laps.py", "lives in app/packet.py") are gone; Garage and Analysis helper
+  text tightened. Couch app, not a manual.
+- Layout hardening (grid `minmax`, an overflow floor) for very narrow devices.
+
 ## [2.12.1] - 2026-07-22
 
 ### Changed
