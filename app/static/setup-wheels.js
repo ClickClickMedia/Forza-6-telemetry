@@ -20,16 +20,16 @@
     su_caster: { min: 1, max: 7, step: 0.1, dec: 1, unit: "°" },
     su_arb_f: { min: 1, max: 65, step: 1, dec: 0 },
     su_arb_r: { min: 1, max: 65, step: 1, dec: 0 },
-    su_spring_f: { min: 0, max: null, step: 1, dec: 0 },
-    su_spring_r: { min: 0, max: null, step: 1, dec: 0 },
-    su_ride_f: { min: 0, max: null, step: 0.1, dec: 1 },
-    su_ride_r: { min: 0, max: null, step: 0.1, dec: 1 },
+    su_spring_f: { min: 0, max: null, step: 1, dec: 0, home: 500 },
+    su_spring_r: { min: 0, max: null, step: 1, dec: 0, home: 500 },
+    su_ride_f: { min: 0, max: null, step: 0.1, dec: 1, home: 10 },
+    su_ride_r: { min: 0, max: null, step: 0.1, dec: 1, home: 10 },
     su_reb_f: { min: 0, max: 20, step: 0.1, dec: 1 },
     su_reb_r: { min: 0, max: 20, step: 0.1, dec: 1 },
     su_bump_f: { min: 0, max: 20, step: 0.1, dec: 1 },
     su_bump_r: { min: 0, max: 20, step: 0.1, dec: 1 },
-    su_aero_f: { min: 0, max: null, step: 1, dec: 0 },
-    su_aero_r: { min: 0, max: null, step: 1, dec: 0 },
+    su_aero_f: { min: 0, max: null, step: 1, dec: 0, home: 200 },
+    su_aero_r: { min: 0, max: null, step: 1, dec: 0, home: 200 },
     su_diff_f_accel: { min: 0, max: 100, step: 1, dec: 0, unit: "%" },
     su_diff_f_decel: { min: 0, max: 100, step: 1, dec: 0, unit: "%" },
     su_diff_r_accel: { min: 0, max: 100, step: 1, dec: 0, unit: "%" },
@@ -49,12 +49,12 @@
     const m = document.createElement("div");
     input.style.display = "none";
     input.insertAdjacentElement("afterend", m);
-    return FHWheel.make(m, cfg, parseFloat(input.value),
-                        (v) => { input.value = v; });
+    // Pass the raw string: an empty field becomes an unset ("—") dial.
+    return FHWheel.make(m, cfg, input.value, (v) => { input.value = v; });
   }
 
   function setGearCount(n) {
-    const cur = gearWheels.map((w) => parseFloat(w.value()));
+    const cur = gearWheels.map((w) => w.value());        // "" for an unset gear
     gearRows.innerHTML = ""; gearWheels = [];
     for (let i = 0; i < n; i++) {
       const row = document.createElement("div");
@@ -62,16 +62,15 @@
       row.innerHTML = '<span class="eyebrow">' + ORD[i] + "</span>";
       const m = document.createElement("div");
       row.appendChild(m); gearRows.appendChild(row);
-      let v = isFinite(cur[i]) ? cur[i]
-        : (i > 0 && isFinite(cur[i - 1]) ? cur[i - 1] * 0.82 : 3.2 - i * 0.4);
-      if (v < GEAR.min) v = GEAR.min;
-      gearWheels.push(FHWheel.make(m, GEAR, v, recombine));
+      // Added slots start unset — we never invent a ratio the driver didn't give.
+      gearWheels.push(FHWheel.make(m, GEAR, cur[i] != null ? cur[i] : "", recombine));
     }
     gearCountEl.textContent = n;
   }
   function recombine() {
+    // Only real (set) ratios go into the string; unset gears are omitted.
     document.getElementById("su_gears").value =
-      gearWheels.map((w) => w.value()).join(" / ");
+      gearWheels.map((w) => w.value()).filter((v) => v !== "").join(" / ");
   }
 
   function buildGears() {
@@ -90,7 +89,7 @@
     gearCountEl = wrap.querySelector("#gearCount");
     wrap.querySelectorAll(".gc").forEach((b) => b.addEventListener("click", () => {
       const n = gearWheels.length + (b.dataset.d === "1" ? 1 : -1);
-      setGearCount(Math.max(1, Math.min(10, n)));
+      setGearCount(Math.max(0, Math.min(10, n)));       // 0 = per-gear not specified
       recombine();
     }));
   }
@@ -104,16 +103,16 @@
     buildGears();
   }
 
-  function sync(topGear) {
+  function sync() {
     Object.keys(wheels).forEach((id) => {
       const input = document.getElementById(id);
-      if (input) wheels[id].set(parseFloat(input.value));
+      if (input) wheels[id].set(input.value);            // "" -> unset dial
     });
     const input = document.getElementById("su_gears");
     const parts = (input.value || "").split(/[/,]/)
       .map((s) => parseFloat(s)).filter(isFinite);
-    const n = parts.length || (topGear >= 4 ? topGear : 6);
-    setGearCount(n);
+    // Gears are optional: a car with no saved ratios starts with zero rows.
+    setGearCount(parts.length);
     parts.forEach((v, i) => { if (gearWheels[i]) gearWheels[i].set(v); });
     recombine();
   }
