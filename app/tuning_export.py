@@ -68,21 +68,52 @@ with different levers. Read tyre-temperature TREND, not just the peak.
 You do not know each slider's min/max range for this car (Forza does not
 broadcast it) — do not assume headroom in either direction; if a change
 would need to exceed a plausible range, flag it "if the slider allows".
+Before finalising any change, check it against the evidence and drop it if
+the report shows no matching failure mode: no brake change without a
+braking fault, no alignment change without tyre evidence, no gearing change
+without gear/speed evidence, no suspension change when body control reads
+healthy.
 Never invent data this export does not contain.
 """
 
-FIRSTTUNE_PROMPT = """\
-Produce a complete one-shot tune for this car — a full baseline setup, not
-a cautious single change. This is the "first tune" objective: the car is
-new or far from sorted, and coordinated changes across every subsystem are
-expected and wanted.
+# Appended to every analysis prompt (all modes). The distilled kernel of a
+# stable evidence contract: precedence + the cross-car transfer ban that
+# stops a model with long chat history importing another car's tune.
+UNIVERSAL_RAILS = """\
+Evidence precedence: this session's telemetry first, then matched previous
+sessions of THIS car, then the setup shown, then general vehicle dynamics.
+Do NOT carry tune values, preferred ratios or car-specific conclusions over
+from another vehicle or an earlier conversation — a setting that helped a
+different car is not evidence for this one. Where prior patterns and the
+current telemetry disagree, the current session wins.
+"""
 
-Give concrete target values (from the current setup shown) for tyres,
-gearing, alignment, anti-roll bars, springs, ride height, damping, aero,
-differential and brakes — everything the evidence supports moving. Order
-them most-impactful first and cite the telemetry behind each. Judge the
-result by repeatable matched pace, usable throttle and stability — not by
-neutrality alone, and not by a lower understeer index.
+FIRSTTUNE_PROMPT = """\
+Produce a complete one-shot tune for this car — a full baseline, not a
+cautious single change. This is the "first tune" objective: the car is new
+or far from sorted, so coordinated changes are on the table.
+
+"Complete" means every tunable subsystem gets a disposition, NOT that every
+value must move. For each of tyres, gearing, alignment, anti-roll bars,
+springs, ride height, damping, aero, differential and brakes, give exactly
+one verdict:
+- CHANGE — a concrete target value (from the current setup shown) and the
+  telemetry behind it;
+- RETAIN — keep the current value, with the evidence for leaving it;
+- CANNOT ASSESS — the channels needed aren't in this export;
+- RANGE REQUIRED — a change is warranted, but the exact target needs the
+  in-game slider bounds, which Forza does not broadcast.
+A tune that moves one subsystem and explicitly RETAINS the rest is a
+complete, valid answer — changing everything to look thorough is the
+failure mode, not the goal. Order the CHANGE items most-impactful first.
+Judge the result by repeatable matched pace, usable throttle and stability
+— not by neutrality alone, and not by a lower understeer index.
+
+Before you finalise, test every CHANGE against the evidence and drop any
+that fails: does the body-control evidence actually show a suspension
+problem? the braking evidence a brake fault? the gear/speed evidence a
+gearing problem? the available tyre evidence support an alignment move? If
+the report does not show the failure mode, leave that subsystem alone.
 
 Ground rules that still hold:
 - If both axles are flagged past the grip limit, say plainly that the
@@ -1193,6 +1224,7 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
         add(FIRSTTUNE_PROMPT if first_tune
             else EXPERIMENT_PROMPT if experiment
             else QUICK_PROMPT if quick else AI_PROMPT)
+        add(UNIVERSAL_RAILS)
     else:
         add("*This export contains evidence only and makes no request for "
             "analysis.*")

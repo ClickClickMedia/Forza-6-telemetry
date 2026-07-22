@@ -211,6 +211,69 @@ def test_new_session_metrics_present():
     assert isinstance(b["both_axles_saturated"], bool)
 
 
+def test_sessions_for_car_excludes_later_runs(tmp_path: Path):
+    """The 'since last session' lineage must only look BACKWARD: re-opening
+    an older run must not compare it against runs recorded after it (the
+    reversed-delta bug found on the Cayman)."""
+    db = Database(tmp_path / "t.db")
+
+    def mk(name: str, ordinal: int) -> int:
+        sid = db.create_session(name, "2026-07-22T00:00:00", True, "r", "v1")
+        db.finalize_session(sid, "2026-07-22T00:05:00", 100,
+                            {"car_ordinal": ordinal})
+        return sid
+
+    s1 = mk("run1", 4232)
+    s2 = mk("run2", 4232)
+    s3 = mk("run3", 4232)
+    mk("other-car", 999)
+    # The middle run sees only the earlier run — never the later one.
+    assert [r["id"] for r in db.sessions_for_car(4232, s2)] == [s1]
+    # The oldest run has no prior lineage at all.
+    assert db.sessions_for_car(4232, s1) == []
+    # The newest sees both earlier, newest-first; the other car never appears.
+    assert [r["id"] for r in db.sessions_for_car(4232, s3)] == [s2, s1]
+    db.close()
+
+
+def test_first_tune_requires_subsystem_dispositions():
+    """First-tune 'complete' means a verdict per subsystem, not
+    change-everything — the direct fix for the Cayman over-tune."""
+    sd = _synthetic_session(seconds=30.0)
+    md = build_markdown(sd, META, "2.7.0", setup={"label": "v", "data": {}},
+                        variant="first_tune")
+    flat = " ".join(md.split())
+    for verdict in ("CHANGE", "RETAIN", "CANNOT ASSESS", "RANGE REQUIRED"):
+        assert verdict in flat, verdict
+    assert "that every value must move" in flat
+    assert "changing everything to look thorough is the failure mode" in flat
+    # The contradiction check rides along in first-tune too.
+    assert "leave that subsystem alone" in flat
+
+
+def test_universal_rails_forbid_cross_car_transfer():
+    """Every analysis mode carries the cross-car transfer ban — the antidote
+    to a long chat importing another car's tune (the context-rot failure)."""
+    sd = _synthetic_session(seconds=30.0)
+    setup = {"label": "v", "data": {}}
+    for variant in ("full", "first_tune", "experiment", "quick"):
+        low = " ".join(build_markdown(sd, META, "2.7.0", setup=setup,
+                                      variant=variant).lower().split())
+        assert "not evidence for this one" in low, variant
+        assert "the current session wins" in low, variant
+    # A data-only export makes no request for analysis — no prompt, no rails.
+    d = build_markdown(sd, META, "2.7.0", setup=None, variant="data")
+    assert "not evidence for this one" not in d.lower()
+
+
+def test_default_prompt_carries_contradiction_check():
+    sd = _synthetic_session(seconds=30.0)
+    low = " ".join(build_markdown(sd, META, "2.7.0",
+                   setup={"label": "v", "data": {}}).lower().split())
+    assert "no brake change without a braking fault" in low
+    assert "no suspension change when body control reads healthy" in low
+
+
 def test_experiment_mode_prompts_bold_single_variable():
     """Experiment mode is opt-in and deliberately flips the caution: one
     variable, pushed to a near-extreme, falsifiable — NOT a cautious tune."""

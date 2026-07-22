@@ -269,12 +269,14 @@ class Database:
     def sessions_for_car(self, car_ordinal: int, exclude_id: int,
                          limit: int = 6) -> List[Dict[str, Any]]:
         """Earlier sessions with the same car, newest first — the tune
-        lineage a report compares against."""
+        lineage a report compares against. Strictly earlier (id < current):
+        re-opening an old report must not compare it against runs that came
+        after it, which would reverse the 'since last session' delta."""
         with self._lock:
             rows = self._conn.execute(
                 """SELECT id, name, created_at, notes, best_lap, summary_json
                    FROM sessions
-                   WHERE car_ordinal = ? AND id != ? AND ended_at IS NOT NULL
+                   WHERE car_ordinal = ? AND id < ? AND ended_at IS NOT NULL
                    ORDER BY id DESC LIMIT ?""",
                 (car_ordinal, exclude_id, limit),
             ).fetchall()
