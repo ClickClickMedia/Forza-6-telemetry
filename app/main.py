@@ -665,6 +665,17 @@ async def session_analysis(session_id: int) -> Dict[str, Any]:
     return result
 
 
+@app.get("/api/sessions/{session_id}/coach")
+async def session_coach(session_id: int) -> Dict[str, Any]:
+    """A local, deterministic driving-coach read for one session."""
+    from .laps import lap_report
+    from .sections import detect_sections
+    from .coach import coach_report
+    row = _session_or_404(session_id)
+    sd = _load_or_404(row)
+    return coach_report(lap_report(sd), detect_sections(sd))
+
+
 @app.get("/api/sessions/{session_id}/route")
 async def session_route(session_id: int, colour_by: str = "speed") -> Dict[str, Any]:
     from .comparison import single_route
@@ -988,6 +999,11 @@ async def page_sessions() -> HTMLResponse:
 @app.get("/garage", response_class=HTMLResponse)
 async def page_garage() -> HTMLResponse:
     return _page("garage.html")
+
+
+@app.get("/coach", response_class=HTMLResponse)
+async def page_coach() -> HTMLResponse:
+    return _page("coach.html")
 
 
 @app.get("/analysis", response_class=HTMLResponse)
