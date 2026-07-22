@@ -39,6 +39,16 @@ cold → green in-window → amber hot → red over), and **pedal ribbons on the
 screen edges** — brake left, throttle right — readable in peripheral vision
 while you drive.
 
+| Compare two runs | The evidence, auto-detected |
+| --- | --- |
+| ![Compare page — Session A vs B with run time, peak and average speed, g-forces and colour-coded deltas](docs/images/compare.jpg) | ![Analysis — suspension travel plus detected events: wheelspin, over/understeer moments, on-power and steering slip](docs/images/analysis-events.jpg) |
+
+*After you change a tune and drive again, **Compare** puts the two runs
+side by side — but only claims a delta when it can confirm the route
+matched. The right shot is where the numbers come from: the tool detects
+and counts wheelspin, over/understeer moments and slip events, so the
+report you copy is evidence, not vibes.*
+
 ---
 
 ## Get started (Windows, 5 minutes)
