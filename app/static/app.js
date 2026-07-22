@@ -485,6 +485,8 @@
       icon: '<path d="M4 6h16M4 12h16M4 18h9"/>' },
     { href: "/garage", key: "garage", label: "Garage",
       icon: '<path d="M3 11l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M8 19v-5h8v5"/>' },
+    { href: "/coach", key: "coach", label: "Coach",
+      icon: '<path d="M12 3l7 4v5c0 4-3 7-7 8-4-1-7-4-7-8V7l7-4z"/><path d="M9.3 12l1.9 1.9 3.4-3.8"/>' },
     { href: "/analysis", key: "analysis", label: "Analysis",
       icon: '<path d="M4 5v14h16"/><path d="M7 15l3.5-5 3 3L18 7"/>' },
     { href: "/compare", key: "compare", label: "Compare",
@@ -523,6 +525,35 @@
     document.body.appendChild(tabs);
   }
 
+  // --------------------------------------------------- coach's read card
+  // Renders the /api/sessions/{id}/coach payload into `container`. All the
+  // words come from the server (Python) — this only lays them out.
+  function coachCard(container, data) {
+    if (!container) return;
+    const chip = { you: "🧍 you", car: "🔧 car", both: "🧍🔧 you + car" };
+    if (!data || data.data_sufficient === false) {
+      container.innerHTML =
+        '<section class="card coach"><div class="coach-head">Coach’s read</div>' +
+        '<p class="coach-line">' +
+        (data && data.headline ? esc(data.headline) : "No read yet.") +
+        "</p></section>";
+      return;
+    }
+    const flags = (data.flags || []).map(function (f) {
+      return '<div class="coach-flag"><span class="coach-tag tag-' +
+        esc(f.tag) + '">' + (chip[f.tag] || esc(f.tag)) +
+        '</span><div><div class="coach-title">' + esc(f.title) +
+        '</div><div class="coach-detail">' + esc(f.detail) +
+        "</div></div></div>";
+    }).join("");
+    const line = (data.summary && data.summary.line) || "";
+    container.innerHTML =
+      '<section class="card coach"><div class="coach-head">Coach’s read</div>' +
+      '<p class="coach-headline">' + esc(data.headline) + "</p>" +
+      (line ? '<p class="coach-line">' + esc(line) + "</p>" : "") +
+      flags + "</section>";
+  }
+
   // --------------------------------------------------- service worker
   function registerSW() {
     if ("serviceWorker" in navigator) {
@@ -540,7 +571,7 @@
     fmtLapTime, fmt, fmtDuration, fmtDate, toG, esc, qs, clamp,
     speedOut, tempOut, ema, emaArray,
     TEMP, tempClass, rampRGB, palette,
-    prepCanvas, lineChart, routeChart, barChart,
+    prepCanvas, lineChart, routeChart, barChart, coachCard,
     copyText, toast, shell, registerSW, fmtBytes
   };
 })();

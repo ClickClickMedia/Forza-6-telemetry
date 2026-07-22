@@ -680,3 +680,26 @@ details.exporter > .menu .hint { font-size: 10px; color: var(--ink-mute); font-f
   text-align: center;
 }
 #toast.show { opacity: 1; }
+
+/* --- Coach's read card --------------------------------------------------- */
+.card.coach { border-left: 3px solid var(--amber); }
+.coach-head {
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-mute); margin-bottom: 6px;
+}
+.coach-headline { font-weight: 700; font-size: 1.06rem; margin: 0 0 4px;
+  color: var(--paint); }
+.coach-line { color: var(--ink-dim); margin: 0 0 10px; }
+.coach-flag {
+  display: flex; gap: 12px; padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.coach-tag {
+  white-space: nowrap; font-size: .72rem; font-weight: 700; padding-top: 2px;
+  flex: 0 0 auto; min-width: 74px;
+}
+.coach-title { font-weight: 600; color: var(--paint); }
+.coach-detail { color: var(--ink); font-size: .92rem; margin-top: 2px; }
+.coach-tag.tag-you { color: var(--cold); }
+.coach-tag.tag-car { color: var(--amber); }
+.coach-tag.tag-both { color: var(--over); }

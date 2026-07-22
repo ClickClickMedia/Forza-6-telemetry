@@ -27,6 +27,9 @@
 
     <div id="content" class="hidden">
 
+      <!-- Coach's read: the TL;DR above the detail -->
+      <div id="coachMount"></div>
+
       <!-- Session header + export bar -->
       <div class="card" style="margin-bottom:10px;">
         <div class="spread">
@@ -325,7 +328,7 @@
   (function () {
     "use strict";
     const FH = window.FH;
-    const { api, esc, fmt, fmtLapTime, fmtDuration, barChart, routeChart, toast } = FH;
+    const { api, esc, fmt, fmtLapTime, fmtDuration, barChart, routeChart, coachCard, toast } = FH;
     FH.shell("analysis");
     FH.registerSW();
 
@@ -571,6 +574,10 @@
         renderLaps(rep);
         renderEvents(a, rep);
         loadRoute();
+        // Coach's read is best-effort — never block the analysis on it.
+        api("/api/sessions/" + sessionId + "/coach")
+          .then((c) => coachCard(document.getElementById("coachMount"), c))
+          .catch(() => {});
       } catch (e) { showMsg("Failed to load analysis: " + e.message); }
     }
 
