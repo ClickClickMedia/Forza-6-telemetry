@@ -48,7 +48,6 @@ html, body {
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain;
-  overflow-x: hidden;   /* mobile floor: nothing scrolls the page sideways */
 }
 body { min-height: 100vh; min-height: 100dvh; }
 

@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.13.1] - 2026-07-22
+
+### Fixed
+- **Mobile scroll lock.** The `overflow-x: hidden` floor added in 2.13.0 turned
+  the page body into a scroll container and broke vertical scrolling on phones.
+  Removed — there was no real horizontal overflow to guard against anyway.
+
 ## [2.13.0] - 2026-07-22
 
 ### Changed — mobile UX tidy-up
