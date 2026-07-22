@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.12.0] - 2026-07-22
+
+### Changed — sharper, non-leading evidence
+Two of the three "sharpening" refinements to the deterministic evidence. (The
+third — recomputing every session metric over timed-clean frames only — is a
+deeper core-pipeline change held for a properly validated pass; it barely
+moves a mostly-timed capture and risks the read, so it isn't rushed. The
+timed-vs-capture *labelling* it would pair with already exists.)
+- **Candidate mechanisms, not canned causes.** The evidence no longer asserts
+  "inside-wheel flare is the classic more-diff-lock signal." It lists the
+  plausible causes (insufficient acceleration lock, an inside wheel unloading,
+  an axle already at its grip limit) and says to weigh them against the
+  current diff lock, axle utilisation and gear-specific spin. Non-leading — so
+  the AI reasons instead of pattern-matching a canned answer.
+- **Scruffy laps excluded from consistency.** The evidence's lap-consistency
+  read now drops laps outside 15% of your best (spins, parked/paused laps)
+  before computing spread — the same rule as the coach — so one bad lap can't
+  read as a "47% spread." It states how many it excluded.
+
 ## [2.11.0] - 2026-07-22
 
 ### Changed — one deterministic read, everywhere

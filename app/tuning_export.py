@@ -14,7 +14,7 @@ import io
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .coach import coach_markdown
+from .coach import coach_markdown, CLEAN_LAP_MULT
 from .laps import WHEELS, lap_report
 from .sections import detect_sections
 from .session_data import SessionData
@@ -874,9 +874,12 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                     else "mostly the **outside** driven wheel"
                     if outs > ins * 1.5 else "split inside/outside")
             add(f"- Single-wheel flare while turning is {side} "
-                f"(inside {ins:.1f} s / outside {outs:.1f} s) — inside-wheel "
-                f"flare on exit is the classic more-diff-accel-lock signal; "
-                f"outside or both-wheel points at power vs tyre instead")
+                f"(inside {ins:.1f} s / outside {outs:.1f} s). Inside-wheel "
+                f"flare can mean insufficient acceleration lock, an inside "
+                f"wheel unloading mid-corner, or an axle already at its grip "
+                f"limit — weigh it against the current diff lock, axle "
+                f"utilisation and gear-specific spin, not as one fixed cause. "
+                f"Outside or both-wheel flare points more at power vs tyre.")
         add(f"- Wheelspin split (mutually exclusive; buckets sum to the total): "
             + " · ".join(f"{w} only {s:.1f} s" for w, s in byw.items())
             + f" · multiple driven wheels {multi:.1f} s — "
@@ -1089,11 +1092,21 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
                     if l.get("complete") and l.get("time_s")
                     and l.get("lap") is not None
                     and not l.get("rewind_affected")]
+        # Drop scruffy laps (spins, parked/paused) — one spun or 26-minute
+        # lap must not dominate the consistency read. Mirrors the coach.
+        _excl = 0
+        if complete:
+            _best = min(l["time_s"] for l in complete)
+            _clean = [l for l in complete
+                      if l["time_s"] <= _best * CLEAN_LAP_MULT]
+            _excl = len(complete) - len(_clean)
+            complete = _clean
+        _xn = f" ({_excl} scruffy excluded)" if _excl else ""
         if len(complete) == 2:
             spread = abs(complete[0]["time_s"] - complete[1]["time_s"])
-            add(f"- Repeatability *(driver signal)*: two valid laps "
-                f"{spread:.3f} s apart — a tight spread means a session-to-"
-                f"session gain is a repeatable result, not a single-lap "
+            add(f"- Repeatability *(driver signal)*: two clean laps "
+                f"{spread:.3f} s apart{_xn} — a tight spread means a session-"
+                f"to-session gain is a repeatable result, not a single-lap "
                 f"outlier.")
             add("")
         elif len(complete) >= 3:
@@ -1103,10 +1116,10 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
             pct = spread / median * 100.0 if median else 0.0
             thr = [l["inputs"]["pct_full_throttle"] for l in complete]
             brk = [l["inputs"]["pct_braking"] for l in complete]
-            add(f"- Lap consistency *(driver signal, {len(complete)} complete "
-                f"laps)*: spread {spread:.3f} s = **{pct:.1f}% of the median "
-                f"lap** · full-throttle {min(thr):.0f}–{max(thr):.0f}% · "
-                f"braking {min(brk):.0f}–{max(brk):.0f}% "
+            add(f"- Lap consistency *(driver signal, {len(complete)} clean "
+                f"laps{_xn})*: spread {spread:.3f} s = **{pct:.1f}% of the "
+                f"median lap** · full-throttle {min(thr):.0f}–{max(thr):.0f}% "
+                f"· braking {min(brk):.0f}–{max(brk):.0f}% "
                 f"*(for scale: above ~2% spread, lap-to-lap variance "
                 f"typically exceeds the effect of a single setup change)*")
             add("")
