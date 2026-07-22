@@ -14,6 +14,7 @@ import io
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .coach import coach_markdown
 from .laps import WHEELS, lap_report
 from .sections import detect_sections
 from .session_data import SessionData
@@ -678,6 +679,13 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("- Conditions: " + (", ".join(wet_w + dark_w) + " (user-declared)"
                             if (wet_w or dark_w)
                             else "not declared — assumed dry"))
+    add("")
+
+    # The deterministic read leads the evidence — the one dominant finding
+    # and the driver-vs-car triage, before the wall of numbers. Same engine
+    # as the in-app coach; appears in every blob (Copy evidence included).
+    for _ln in coach_markdown(rep, sections).split("\n"):
+        add(_ln)
     add("")
 
     add("## Session")

@@ -251,3 +251,27 @@ def coach_report(report: Dict[str, Any],
                     f"behaving. Best lap {_fmt(summary.get('best_lap_s'))}.")
     return {"data_sufficient": True, "headline": headline,
             "summary": summary, "flags": flags}
+
+
+def coach_markdown(report: Dict[str, Any],
+                   sections: Optional[Dict[str, Any]] = None) -> str:
+    """Render the coach read as a Markdown block to lead an evidence export:
+    the deterministic verdict before the wall of numbers. Non-prescriptive —
+    it reports what the telemetry shows, it does not recommend a tune."""
+    out = coach_report(report, sections)
+    tag = {TAG_YOU: "🧍 you", TAG_CAR: "🔧 car", TAG_BOTH: "🧍🔧 you + car"}
+    lines = ["## The read (deterministic)", "",
+             f"**{out['headline']}**", ""]
+    flags = out.get("flags") or []
+    if out.get("data_sufficient") and flags:
+        for f in flags:
+            lines.append(f"- **{tag.get(f['tag'], f['tag'])}** — "
+                         f"{f['title']}: {f['detail']}")
+        lines.append("")
+        lines.append("*A computed read from the telemetry, not a tune "
+                     "recommendation. A 🧍 finding can be driver variance "
+                     "rather than the setup — weigh it against repeatable laps "
+                     "before tuning around it.*")
+    else:
+        lines.append(f"*{(out.get('summary') or {}).get('line', '')}*")
+    return "\n".join(lines)

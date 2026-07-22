@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.11.0] - 2026-07-22
+
+### Changed — one deterministic read, everywhere
+The coach's read now leads **every** evidence export — the engineering copy,
+Copy evidence, and the ZIP's `report.md` — as a `## The read (deterministic)`
+block above the numbers: the one dominant finding and the driver-vs-car
+triage, computed by the same engine as the in-app Coach card. It reports
+what the telemetry shows and explicitly does **not** prescribe a tune; a 🧍
+(driver) finding carries a "could be variance — weigh against repeatable
+laps" caveat so the AI doesn't tune around a one-off. This unifies the tool
+around one idea: a single deterministic verdict, then the raw evidence, then
+a lean ask — never a canned tune.
+
 ## [2.10.0] - 2026-07-22
 
 ### Changed — the AI package is the primary hand-off

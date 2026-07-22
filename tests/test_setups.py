@@ -172,6 +172,18 @@ def test_lean_prompts_are_expert_tuner_not_method_walls():
         assert gone not in default, gone
 
 
+def test_evidence_leads_with_the_deterministic_read():
+    """The coach's verdict leads every evidence blob — the engineering copy
+    AND pure Copy evidence — before the wall of numbers."""
+    sd = _synthetic_session(seconds=90.0)
+    full = build_markdown(sd, META, "2.10.0", setup={"label": "v", "data": {}})
+    assert "## The read (deterministic)" in full
+    assert full.index("## The read") < full.index("## Session")
+    # Copy evidence (data-only, no setup, no prompt) still gets the read.
+    data = build_markdown(sd, META, "2.10.0", setup=None, variant="data")
+    assert "## The read (deterministic)" in data
+
+
 def test_package_index_is_lean_and_manifests_the_files():
     """START-HERE.md carries the lean ask, a file manifest, and the honesty
     rail — the AI-facing entry to the ZIP."""

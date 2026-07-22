@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from app.coach import (coach_report, _fmt, _car_flags, _driver_flags)
+from app.coach import (coach_report, coach_markdown, _fmt, _car_flags,
+                       _driver_flags)
 from app.laps import lap_report
 from app.sections import detect_sections
 from tests.test_laps import _synthetic_session
@@ -258,6 +259,13 @@ def test_cayman_after_bad_tune_reads_nervous_and_power_down():
 
 
 # --- integration on real synthetic analysis (guards field names) ----------
+
+def test_coach_markdown_leads_with_verdict_and_caveat():
+    sd = _synthetic_session(seconds=90.0)
+    md = coach_markdown(lap_report(sd), detect_sections(sd))
+    assert md.startswith("## The read (deterministic)")
+    assert "not a tune recommendation" in md
+
 
 def test_coach_report_runs_on_real_synthetic_analysis():
     sd = _synthetic_session(seconds=90.0)
