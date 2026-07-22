@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.14.0] - 2026-07-22
+
+### Changed — the AI package confirms your car & tune first
+The AI-package button now opens the **Car & setup** sheet before bundling,
+instead of downloading straight away. Without the car identity and the tune,
+the package can't tell an AI what to change *from* — so it confirms them first
+(pre-filled with your latest saved tune), then the sheet downloads the package.
+The sheet offers both hand-offs — **Save & download AI package** and **Save &
+copy report** — so the old Engineering-brief flow lives there too (its
+standalone button is gone; it was the same sheet). The direct .zip is still
+available under Export files for power users.
+
 ## [2.13.1] - 2026-07-22
 
 ### Fixed

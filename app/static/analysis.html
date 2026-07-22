@@ -44,15 +44,15 @@
         </div>
         <p id="notes" class="muted small" style="margin:8px 0 10px;"></p>
         <div class="exportbar">
-          <a id="lnkPackageMain" class="btn primary" href="#" download>📦 AI package (.zip)</a>
-          <button id="btnCopySetup" class="btn">Engineering brief</button>
+          <button id="btnPackage" class="btn primary">📦 AI package (.zip)</button>
           <button id="btnQuick" class="btn ghost">⚡ Quick analysis</button>
           <button id="btnCopyData" class="btn ghost">Copy evidence</button>
           <button id="btnFiles" class="btn ghost">Export files ▾</button>
         </div>
-        <p class="muted small" style="margin:6px 0 0;">The <b>AI package</b> is
-          the best hand-off — full data as files. No AI runs in the tool; you
-          paste into ChatGPT or Claude.</p>
+        <p class="muted small" style="margin:6px 0 0;">The <b>AI package</b>
+          confirms your car &amp; tune, then bundles the full data as files —
+          the best hand-off. No AI runs in the tool; you paste into ChatGPT or
+          Claude.</p>
       </div>
 
       <!-- Tuning verdicts -->
@@ -311,7 +311,8 @@
       </div>
     </div>
     <footer>
-      <button id="btnSaveCopy" class="btn primary">Save setup & copy report</button>
+      <button id="btnSavePackage" class="btn primary">📦 Save &amp; download AI package</button>
+      <button id="btnSaveCopy" class="btn">Save &amp; copy report</button>
     </footer>
   </div>
 
@@ -549,7 +550,6 @@
       document.getElementById("lnkRawCsv").href = "/api/sessions/" + sessionId + "/download.csv";
       document.getElementById("lnkSections").href = "/api/sessions/" + sessionId + "/sections.json?download=1";
       document.getElementById("lnkPackage").href = "/api/sessions/" + sessionId + "/package.zip";
-      document.getElementById("lnkPackageMain").href = "/api/sessions/" + sessionId + "/package.zip";
       msg.classList.add("hidden");
       content.classList.add("hidden");
       loading.classList.remove("hidden");
@@ -834,6 +834,29 @@
       } catch (err) { toast("Save failed: " + err.message); }
       btn.disabled = false;
     });
+    document.getElementById("btnSavePackage").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const ordinal = curMeta.car_ordinal;
+      if (ordinal == null) { toast("No car in this session"); return; }
+      btn.disabled = true;
+      try {
+        const res = await api("/api/setups", { json: {
+          car_ordinal: ordinal,
+          label: document.getElementById("su_label").value.trim(),
+          data: gatherForm(),
+        }});
+        toast(res.created === false
+          ? "No change since " + res.label + " — packaging it"
+          : "Saved as " + res.label + " — packaging");
+        // Trigger the .zip download (server sends it as an attachment).
+        const a = document.createElement("a");
+        a.href = "/api/sessions/" + sessionId + "/package.zip";
+        a.download = "";
+        document.body.appendChild(a); a.click(); a.remove();
+        closeSheet();
+      } catch (err) { toast("Save failed: " + err.message); }
+      btn.disabled = false;
+    });
 
     // Two intents, two paths: quick analysis copies immediately (no setup
     // needed — the AI locates problems from telemetry alone); engineering
@@ -852,7 +875,7 @@
 
     document.getElementById("btnQuick").addEventListener("click", (e) =>
       copyReport("?mode=quick", e.currentTarget));
-    document.getElementById("btnCopySetup").addEventListener("click", openSheet);
+    document.getElementById("btnPackage").addEventListener("click", openSheet);
     document.getElementById("btnCopyData").addEventListener("click", (e) =>
       copyReport("?mode=data", e.currentTarget));
 
