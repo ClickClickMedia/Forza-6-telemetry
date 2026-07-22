@@ -24,6 +24,14 @@ The honest framing that mattered (grip-deficit banner, provenance notes,
 saturation flags) was never in the prompt anyway: it lives in the rendered
 **evidence**, so the AI still sees the truth regardless of the prompt.
 
+Following the same principle, the **Report goal toggle is gone**. First-tune
+and experiment modes each baked a mode-specific ask into the copied file —
+the exact context-in-the-file we're cutting, and both are a sentence the
+user can type themselves. Now there's one lean engineering copy; want an
+experiment or any other framing, ask your AI directly after pasting. **Copy
+evidence** still gives a pure, ask-free telemetry export. (`/tuning.md`
+keeps `?mode=quick` and `?mode=data`; `experiment`/`first_tune` are removed.)
+
 ## [2.8.0] - 2026-07-22
 
 ### Added — Driving Coach (local, deterministic)

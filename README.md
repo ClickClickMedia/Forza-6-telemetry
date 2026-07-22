@@ -124,11 +124,14 @@ setting values.**
    - **Engineering brief** — includes your saved tune (stored per car,
      last version pre-loaded, edit the one or two values you changed) plus
      the **changes since the previous revision**, discipline and assists.
-     A **Report goal** toggle sets what you want from it: *Tune advice*
-     (scaled to the evidence), *First tune* (a complete one-shot setup for
-     a new car — [worked example](docs/example-first-tune.md)), or
-     *Experiment* (one bold, reversible single-variable test to learn the
-     most from the next run).
+     The copied prompt is deliberately **lean** — *"you're an expert Forza
+     Horizon 6 tuner; review the evidence and give a competitive tune"* plus
+     one honesty rail (no tyre-pressure channel, unknown slider ranges — so
+     don't invent numbers). Layering method into the prompt made tune advice
+     *worse*; the AI does better with clean evidence and a free hand ([worked
+     example](docs/example-first-tune.md)). Want an experiment, or a focus on
+     one axle instead? Just ask the AI directly after you paste — the file
+     stays evidence.
    This is a **separate step you choose to do** — the copy lands on your
    clipboard, and *you* paste it into Claude or ChatGPT. No AI runs inside
    the tool. Whatever an AI then suggests is on you to judge; it can spit
@@ -321,7 +324,7 @@ this cross-check live; if it ever fails on your setup,
 | GET | `/api/sessions/{id}/analysis` | Full analysis |
 | GET | `/api/sessions/{id}/laps` | Lap breakdown + tuning aggregates + verdicts |
 | GET | `/api/garage` | Per-car rollup (sessions, tune versions, best lap) |
-| GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data\|experiment\|first_tune`, `?style=compact`, `?setup_id=N`, `?download=1`) |
+| GET | `/api/sessions/{id}/tuning.md` | Evidence report (`?mode=quick\|data`, `?style=compact`, `?setup_id=N`, `?download=1`) |
 | GET | `/api/sessions/{id}/sections.json` | Structured corner-section evidence |
 | GET | `/api/sessions/{id}/package.zip` | Full session bundle (report, CSVs, sections, metadata, setup) |
 | GET | `/api/sessions/{id}/laps.csv` | Per-lap summary CSV |

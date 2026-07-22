@@ -300,14 +300,6 @@
           </div>
         </div>
 
-        <div class="field full frm-section"><span class="eyebrow" style="display:block;margin-bottom:5px;">Report goal</span>
-          <div class="seg" id="suGoalMode">
-            <button class="btn small" data-v="full">Tune advice</button>
-            <button class="btn small" data-v="first_tune">First tune</button>
-            <button class="btn small" data-v="experiment">Experiment</button>
-          </div>
-          <span class="small muted" style="display:block;margin-top:4px;"><b>Tune advice</b>: intervention scaled to the evidence. <b>First tune</b>: a complete one-shot coordinated setup for a new/unsorted car. <b>Experiment</b>: one bold reversible single-variable test to learn the most from the next run.</span>
-        </div>
         <div class="field full"><span class="eyebrow" style="display:block;margin-bottom:5px;">Report style</span>
           <div class="seg" id="suStyle">
             <button class="btn small" data-v="detailed">Detailed</button>
@@ -743,26 +735,10 @@
       }));
     paintStyle();
 
-    // Report goal: cautious tune advice (default) vs a bold single-variable
-    // experiment. Session-scoped, resets to tune advice each time the sheet
-    // opens so experiment mode is always a deliberate choice.
-    let reportGoal = "full";
-    function paintGoal() {
-      document.querySelectorAll("#suGoalMode .btn").forEach((b) =>
-        b.classList.toggle("on", b.dataset.v === reportGoal));
-    }
-    document.querySelectorAll("#suGoalMode .btn").forEach((b) =>
-      b.addEventListener("click", () => { reportGoal = b.dataset.v; paintGoal(); }));
-    paintGoal();
-
     async function copyReport(query, btn) {
       if (btn) btn.disabled = true;
       try {
         let q = (query || "") + (query ? "&" : "?") + "style=" + reportStyle;
-        // A non-default goal (first tune / experiment) overrides the default
-        // tune-advice prompt on the engineering (setup-bearing) copies only.
-        if (reportGoal && reportGoal !== "full" && q.indexOf("mode=") === -1)
-          q += "&mode=" + reportGoal;
         const md = await api("/api/sessions/" + sessionId + "/tuning.md" + q);
         const ok = await FH.copyText(md);
         toast(ok ? "Copied! Paste into Claude or ChatGPT for analysis"
@@ -826,8 +802,6 @@
         if (curMeta.car_name) suEl("car_text").value = curMeta.car_name;
         setDrive(DRIVE_NAME[curMeta.drivetrain] || "");
       }
-      reportGoal = "full";
-      paintGoal();
       sheet.classList.remove("hidden");
       backdrop.classList.remove("hidden");
     }

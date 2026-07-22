@@ -172,19 +172,6 @@ def test_lean_prompts_are_expert_tuner_not_method_walls():
         assert gone not in default, gone
 
 
-def test_first_tune_mode_asks_for_competitive_complete_tune():
-    """First-tune is opt-in and lean: a competitive complete tune that keeps
-    the one hard-won kernel — don't change everything."""
-    sd = _synthetic_session(seconds=30.0)
-    setup = {"label": "v1", "data": {"arb_f": "20"}}
-    flat = " ".join(build_markdown(sd, META, "2.9.0", setup=setup,
-                                   variant="first_tune").split())
-    assert "competitive complete tune" in flat
-    assert "leave the rest" in flat  # the anti-change-everything kernel
-    default = " ".join(build_markdown(sd, META, "2.9.0", setup=setup).split())
-    assert "competitive complete tune" not in default
-
-
 def test_new_session_metrics_present():
     """The v2.6.0 diagnostic metrics compute and are exported."""
     from app.laps import lap_report
@@ -237,7 +224,7 @@ def test_honesty_rail_present_in_every_tune_mode():
     ranges, so it doesn't invent numbers. A data-only export has no prompt."""
     sd = _synthetic_session(seconds=30.0)
     setup = {"label": "v", "data": {}}
-    for variant in ("full", "first_tune", "experiment", "quick"):
+    for variant in ("full", "quick"):
         low = " ".join(build_markdown(sd, META, "2.9.0", setup=setup,
                                       variant=variant).lower().split())
         assert "no tyre-pressure channel" in low, variant
@@ -246,24 +233,6 @@ def test_honesty_rail_present_in_every_tune_mode():
     # rail-unique phrase to confirm the data-only export carries no prompt.
     d = build_markdown(sd, META, "2.9.0", setup=None, variant="data")
     assert "don't invent numbers it doesn't contain" not in d.lower()
-
-
-def test_experiment_mode_prompts_bold_single_variable():
-    """Experiment mode is opt-in and deliberately flips the caution: one
-    variable, pushed to a near-extreme, falsifiable — NOT a cautious tune."""
-    sd = _synthetic_session(seconds=30.0)
-    setup = {"label": "v1", "data": {"arb_f": "26", "arb_r": "50"}}
-    md = build_markdown(sd, META, "2.4.0", setup=setup, variant="experiment")
-    assert "decisive, reversible tuning experiment" in md
-    assert "exactly ONE experimental variable" in md
-    assert "falsifiable" in md
-    assert "pass/fail rule" in md
-    # It must NOT carry the default tune-advice prompt's proportional line.
-    assert "Scale the intervention" not in md
-    # The default (lean) export is the expert-tuner ask, not the experiment.
-    default = build_markdown(sd, META, "2.9.0", setup=setup)
-    assert "expert Forza Horizon 6 tuner" in default
-    assert "decisive, reversible tuning experiment" not in default
 
 
 def test_section_scope_statement():

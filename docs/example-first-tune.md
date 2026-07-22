@@ -1,10 +1,11 @@
-# First tune — a worked example
+# A worked tuning example — the Cayman case
 
-**Report goal → First tune** asks the AI for a complete one-shot baseline
-when a car is new or far from sorted. The word that matters is *complete*:
-it means **every tunable subsystem gets a verdict**, not that every value
-must move. This is a real case that shows why that distinction is the whole
-point.
+This is what a good, honest tune looks like: change the one thing the
+evidence supports and leave the rest. The copied prompt is now lean (an
+expert-tuner ask, no method walls), so the discipline shown here comes from
+the *evidence* and a capable model — not from the tool lecturing it. It's a
+real case that shows why "change everything" is the failure mode, not the
+goal.
 
 The car: a **2005 Porsche Cayman GT3 WTAC**, S1 800, AWD.
 

@@ -759,8 +759,7 @@ async def session_tuning_md(session_id: int, download: int = 0,
                               "gearbox", "car_text") if ldata.get(k)}
     md = build_markdown(sd, row, __version__, setup=setup,
                         lineage=_lineage_for(row),
-                        variant=(mode if mode in ("data", "quick",
-                                                  "experiment", "first_tune")
+                        variant=(mode if mode in ("data", "quick")
                                  else "full"),
                         verbose=(style != "compact"),
                         prev_setup=prev_setup,
