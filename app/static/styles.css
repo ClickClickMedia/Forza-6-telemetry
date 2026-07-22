@@ -357,7 +357,7 @@ footer.foot { text-align: center; color: var(--ink-mute); font-family: var(--mon
   border-radius: var(--radius);
   padding: 16px 16px 12px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "speed gear" "rpm rpm";
   align-items: center;
   gap: 4px 16px;
@@ -405,7 +405,7 @@ footer.foot { text-align: center; color: var(--ink-mute); font-family: var(--mon
 .rpm-text .rpm-max { color: color-mix(in srgb, var(--paint) 72%, transparent); }
 
 /* timing */
-.timing-card { display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; align-items: center; }
+.timing-card { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 18px; align-items: center; }
 .t-current { display: flex; flex-direction: column; gap: 3px; }
 .time-big { font-size: clamp(34px, 9.5vw, 52px); font-weight: 700; line-height: 1; color: var(--paint); }
 .t-side { display: flex; flex-direction: column; gap: 6px; text-align: right; white-space: nowrap; }
@@ -419,7 +419,7 @@ footer.foot { text-align: center; color: var(--ink-mute); font-family: var(--mon
 .tyre-stage {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
   grid-template-rows: 1fr 1fr;
   gap: 10px 12px;
   align-items: center;
@@ -453,10 +453,10 @@ footer.foot { text-align: center; color: var(--ink-mute); font-family: var(--mon
 .pod.t-over    { border-color: color-mix(in srgb, var(--over) 65%, var(--line)); background: color-mix(in srgb, var(--over) 10%, var(--carbon-2)); } .pod.t-over .pod-temp { color: var(--over); }
 
 /* powertrain strip */
-.power-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.power-strip { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
 
 /* g / steering */
-.gforce-wrap { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.gforce-wrap { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 14px; align-items: center; }
 .gball { width: 108px; height: 108px; }
 .steer-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .steerbar { position: relative; height: 14px; border-radius: 7px; background: var(--asphalt-2); border: 1px solid var(--line); overflow: hidden; }
