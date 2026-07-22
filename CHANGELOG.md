@@ -22,8 +22,9 @@ car that *understeers* (you fight it) and session 152 — after a broad tune
 that made it worse — as *nervous* (axle flipping 41.7×/min) and unable to
 put its power down. The oscillation threshold is calibrated so 151's
 11.8×/min stays quiet while 152's 41.7×/min trips the "nervous" flag. The
-race summary refuses to read a trend from contaminated laps (a parked or
-paused "lap" no longer produces a fake "pace fading"). See
+race summary excludes scruffy laps (spins, or parked/paused "laps" outside
+15% of your best) before reading consistency, so one bad lap can't mask a
+consistent stint or invent a fake trend. See
 [docs/specs/2026-07-22-driving-coach-design.md](docs/specs/2026-07-22-driving-coach-design.md).
 
 ## [2.7.0] - 2026-07-22

@@ -51,15 +51,15 @@ def test_summary_loose_spread():
     assert coach_report(report)["summary"]["consistency"] == "loose"
 
 
-def test_summary_scattered_laps_read_no_trend():
-    # A parked/paused "lap" makes the spread huge — no trend should be claimed.
+def test_summary_excludes_scruffy_lap():
+    # A parked/paused 1580s "lap" is dropped; the clean laps still read tight.
     report = {"has_laps": True, "best_lap_s": 53.55,
               "laps": _laps([53.55, 54.0, 1580.0, 53.9]),
               "session": {"balance": {}, "traction": {}}}
     s = coach_report(report)["summary"]
-    assert s["consistency"] == "scattered"
-    assert s["trend"] is None
-    assert "vary too much" in s["line"]
+    assert s["laps"] == 3                       # the 1580s lap excluded
+    assert s["consistency"] in ("tight", "workable")
+    assert "excluded" in s["line"]
 
 
 def test_summary_free_roam_has_no_lap_read():

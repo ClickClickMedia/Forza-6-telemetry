@@ -13,7 +13,8 @@ from typing import Any, Dict, List, Optional
 #     docs/specs/2026-07-22-driving-coach-design.md) ---
 CONSISTENCY_TIGHT = 0.010    # lap spread < 1% of best → tight
 CONSISTENCY_LOOSE = 0.030    # > 3% → loose
-CONSISTENCY_CHAOS = 0.150    # > 15% → not a clean stint; don't read a trend
+CLEAN_LAP_MULT = 1.15        # a "clean" lap is within 15% of your best; the
+#                              rest (spins, parked/paused laps) are excluded
 MIN_TIMED_LAPS = 3           # fewer → no consistency/trend read
 MIN_CORNERS = 4              # fewer cornering events → not enough to coach
 CORNERING_TIME_FLOOR = 20.0  # ...or this many seconds of cornering
@@ -51,31 +52,33 @@ def _race_summary(report: Dict[str, Any]) -> Dict[str, Any]:
     laps = [l for l in (report.get("laps") or [])
             if l.get("complete") and l.get("time_s")]
     best = report.get("best_lap_s")
-    if report.get("has_laps") and best and len(laps) >= MIN_TIMED_LAPS:
-        times = [float(l["time_s"]) for l in laps]
-        spread = (max(times) - min(times)) / best
-        if spread > CONSISTENCY_CHAOS:
-            # A huge spread means these aren't a clean stint — free-roam,
-            # a parked/paused "lap", or mixed running. Don't invent a trend.
-            return {"line": (f"{len(laps)} recorded laps, best {_fmt(best)} — "
-                             "but the times vary too much to compare (free-roam "
-                             "or mixed running, not a clean stint)."),
-                    "laps": len(laps), "best_lap_s": best,
-                    "consistency": "scattered", "trend": None}
-        consistency = ("tight" if spread < CONSISTENCY_TIGHT
-                       else "loose" if spread > CONSISTENCY_LOOSE
-                       else "workable")
-        k = max(1, len(times) // 3)
-        early, late = median(times[:k]), median(times[-k:])
-        margin = best * 0.005
-        trend = ("improving" if late < early - margin
-                 else "fading" if late > early + margin else "steady")
-        pace = {"tight": "laps close together",
-                "workable": "some scatter lap-to-lap",
-                "loose": f"a {spread * 100:.1f}% spread"}[consistency]
-        line = f"{len(laps)} laps, best {_fmt(best)} — {pace}; pace {trend}."
-        return {"line": line, "laps": len(laps), "best_lap_s": best,
-                "consistency": consistency, "trend": trend}
+    if report.get("has_laps") and best and laps:
+        raw = [float(l["time_s"]) for l in laps]           # chronological
+        keep = [t for t in raw if t <= best * CLEAN_LAP_MULT]
+        excluded = len(raw) - len(keep)
+        excl = (f" ({excluded} scruffy lap{'s' if excluded != 1 else ''} "
+                "excluded)") if excluded else ""
+        if len(keep) >= MIN_TIMED_LAPS:
+            spread = (max(keep) - min(keep)) / best
+            consistency = ("tight" if spread < CONSISTENCY_TIGHT
+                           else "loose" if spread > CONSISTENCY_LOOSE
+                           else "workable")
+            k = max(1, len(keep) // 3)
+            early, late = median(keep[:k]), median(keep[-k:])
+            margin = best * 0.005
+            trend = ("improving" if late < early - margin
+                     else "fading" if late > early + margin else "steady")
+            pace = {"tight": "laps close together",
+                    "workable": "some scatter lap-to-lap",
+                    "loose": f"a {spread * 100:.1f}% spread"}[consistency]
+            line = (f"{len(keep)} clean laps, best {_fmt(best)}{excl} — "
+                    f"{pace}; pace {trend}.")
+            return {"line": line, "laps": len(keep), "best_lap_s": best,
+                    "consistency": consistency, "trend": trend}
+        return {"line": (f"Best clean lap {_fmt(best)}{excl} — too few clean "
+                         "laps to read consistency yet."),
+                "laps": len(keep), "best_lap_s": best,
+                "consistency": None, "trend": None}
     return {"line": ("Free roam — no timed laps to compare. "
                      "Coaching from your inputs."),
             "laps": len(laps), "best_lap_s": best,
