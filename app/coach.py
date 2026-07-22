@@ -25,7 +25,6 @@ FULL_LOCK_PCT = 40.0         # % of cornering at full lock → over-driving / ca
 LATE_THROTTLE_S = 1.3        # median reapply delay after apex
 POWER_DOWN_RATIO = 1.6       # power-on slide ≫ off-throttle → traction-limited
 POWER_DOWN_FLOOR = 8.0       # ...and this many seconds, so noise doesn't trip it
-OVERSLOW_KMH = 12.0          # exit − min corner speed gap that reads as over-slowed
 CORNER_CATS = ("hairpin", "turn", "sweeper")
 
 TAG_YOU = "you"
@@ -182,18 +181,10 @@ def _driver_flags(session: Dict[str, Any],
                 "take it — pick the throttle up sooner and feed it in.",
                 "throttle_reapply_s", reapply))
 
-    min_k = _section_median(sections, "min_kmh", ("hairpin", "turn"))
-    exit_k = _section_median(sections, "exit_kmh", ("hairpin", "turn"))
-    brake_s = _section_median(sections, "braking_s", ("hairpin", "turn"))
-    if (min_k is not None and exit_k is not None
-            and (exit_k - min_k) >= OVERSLOW_KMH and (brake_s or 0) > 0.5):
-        flags.append(_flag(
-            TAG_YOU, min(1.0, (exit_k - min_k) / 30.0),
-            "You're over-slowing the entries",
-            f"You scrub to {min_k:g} km/h mid-corner then run out to "
-            f"{exit_k:g} — braking too deep and too hard. Brake earlier and "
-            "lighter and carry more entry speed.",
-            "min_kmh", min_k))
+    # (An "over-slowing entries" driver flag was considered but cut: from
+    # aggregate section data, exit − min corner speed is naturally large on
+    # every corner, so there is no honest threshold without a per-corner
+    # reference speed. Deferred to v2.)
 
     # Power-down is a car problem in its own right. If the late-throttle
     # symptom already surfaced it (triaged to the car), don't repeat it;

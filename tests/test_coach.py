@@ -147,13 +147,6 @@ def test_late_throttle_flips_to_car_when_it_wont_take_power():
     assert f["tag"] == "car"
 
 
-def test_over_slowing_entries_is_a_driver_flag():
-    flags, _ = _driver_flags(
-        {"balance": {}, "traction": {}, "full_lock_pct_of_cornering": 0.0},
-        _sec(min_kmh=60, exit_kmh=80, braking_s=1.2))
-    assert any(f["metric"] == "min_kmh" and f["tag"] == "you" for f in flags)
-
-
 def test_power_down_is_a_standalone_car_flag_without_late_throttle():
     flags, pl = _driver_flags(
         {"balance": {}, "traction": {"slide_power_on_s": 40.0,
@@ -178,8 +171,7 @@ def test_report_orders_flags_by_severity_and_sets_headline():
                                          "exit": {"usi": 0.4}}},
                   "traction": {"near_lock_pct_of_braking": 35.0},
                   "full_lock_pct_of_cornering": 55.0}}
-    out = coach_report(report, _sec(reapply=1.7,
-                                    min_kmh=60, exit_kmh=80, braking_s=1.2))
+    out = coach_report(report, _sec(reapply=1.7))
     assert out["data_sufficient"] is True
     sevs = [f["severity"] for f in out["flags"]]
     assert sevs == sorted(sevs, reverse=True)
