@@ -51,6 +51,17 @@ def test_summary_loose_spread():
     assert coach_report(report)["summary"]["consistency"] == "loose"
 
 
+def test_summary_scattered_laps_read_no_trend():
+    # A parked/paused "lap" makes the spread huge — no trend should be claimed.
+    report = {"has_laps": True, "best_lap_s": 53.55,
+              "laps": _laps([53.55, 54.0, 1580.0, 53.9]),
+              "session": {"balance": {}, "traction": {}}}
+    s = coach_report(report)["summary"]
+    assert s["consistency"] == "scattered"
+    assert s["trend"] is None
+    assert "vary too much" in s["line"]
+
+
 def test_summary_free_roam_has_no_lap_read():
     report = {"has_laps": False, "best_lap_s": None, "laps": [],
               "session": {"balance": {}, "traction": {}}}
@@ -203,6 +214,47 @@ def test_insufficient_data_gates_the_read():
     assert out["flags"] == []
     assert ("few more laps" in out["headline"].lower()
             or "not enough" in out["headline"].lower())
+
+
+# --- regression: the real Cayman 151/152 reads (calibration locked) -------
+
+def test_cayman_baseline_reads_car_understeer_not_nervous():
+    """Real session 151 numbers: understeer high, 11.8/min must stay quiet,
+    full-lock triaged to the car."""
+    session = {"balance": {"both_axles_saturated": False,
+                           "understeer_index": 0.4995,
+                           "reversal_rate_per_min": 11.8,
+                           "phases": {"entry": {"usi": 0.586},
+                                      "mid": {"usi": 0.74},
+                                      "exit": {"usi": 0.422},
+                                      "lift": {"usi": 0.704}}},
+               "traction": {"near_lock_pct_of_braking": 45.3,
+                            "slide_power_on_s": 77.2,
+                            "slide_off_throttle_s": 57.2},
+               "full_lock_pct_of_cornering": 62.6}
+    car = _car_flags(session)
+    driver, _ = _driver_flags(session, None)
+    assert not any(f["metric"] == "reversal_rate_per_min" for f in car)
+    assert any(f["metric"] == "understeer_index" and f["tag"] == "car"
+               for f in car)
+    assert any(f["metric"] == "full_lock_pct_of_cornering" and f["tag"] == "both"
+               for f in driver)
+
+
+def test_cayman_after_bad_tune_reads_nervous_and_power_down():
+    """Real session 152 numbers: oscillation exploded to 41.7/min and the
+    car can't deploy power — both surface as car problems."""
+    session = {"balance": {"both_axles_saturated": False,
+                           "understeer_index": 0.3022,
+                           "reversal_rate_per_min": 41.7, "phases": {}},
+               "traction": {"slide_power_on_s": 94.7,
+                            "slide_off_throttle_s": 51.6},
+               "full_lock_pct_of_cornering": 51.0}
+    car = _car_flags(session)
+    driver, _ = _driver_flags(session, None)
+    assert any(f["metric"] == "reversal_rate_per_min" for f in car)
+    assert any(f["metric"] == "slide_power_on_s" and f["tag"] == "car"
+               for f in driver)
 
 
 # --- integration on real synthetic analysis (guards field names) ----------

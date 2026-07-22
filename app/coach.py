@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 #     docs/specs/2026-07-22-driving-coach-design.md) ---
 CONSISTENCY_TIGHT = 0.010    # lap spread < 1% of best → tight
 CONSISTENCY_LOOSE = 0.030    # > 3% → loose
+CONSISTENCY_CHAOS = 0.150    # > 15% → not a clean stint; don't read a trend
 MIN_TIMED_LAPS = 3           # fewer → no consistency/trend read
 MIN_CORNERS = 4              # fewer cornering events → not enough to coach
 CORNERING_TIME_FLOOR = 20.0  # ...or this many seconds of cornering
@@ -53,6 +54,14 @@ def _race_summary(report: Dict[str, Any]) -> Dict[str, Any]:
     if report.get("has_laps") and best and len(laps) >= MIN_TIMED_LAPS:
         times = [float(l["time_s"]) for l in laps]
         spread = (max(times) - min(times)) / best
+        if spread > CONSISTENCY_CHAOS:
+            # A huge spread means these aren't a clean stint — free-roam,
+            # a parked/paused "lap", or mixed running. Don't invent a trend.
+            return {"line": (f"{len(laps)} recorded laps, best {_fmt(best)} — "
+                             "but the times vary too much to compare (free-roam "
+                             "or mixed running, not a clean stint)."),
+                    "laps": len(laps), "best_lap_s": best,
+                    "consistency": "scattered", "trend": None}
         consistency = ("tight" if spread < CONSISTENCY_TIGHT
                        else "loose" if spread > CONSISTENCY_LOOSE
                        else "workable")

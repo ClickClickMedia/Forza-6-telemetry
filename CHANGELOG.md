@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-07-22
+
+### Added — Driving Coach (local, deterministic)
+A post-race read that summarises the run, names the driver habits to fix,
+and flags when the car needs work — each tagged **you** (driver) or **car**
+(tune/build). The honest driver-vs-car triage is the point: identical
+symptoms get opposite verdicts depending on the chassis — holding full lock
+reads as over-driving on a balanced car, but as "the car won't rotate" when
+it understeers. Computed on your device from metrics the app already derives
+(understeer index, oscillation, wheelspin split, brake locks, steering
+saturation, power-on slide) — **no AI, no network**. Surfaces as a card at
+the top of Analysis and a new **Coach** nav tab.
+
+Validated against the real Cayman before/after: it reads session 151 as a
+car that *understeers* (you fight it) and session 152 — after a broad tune
+that made it worse — as *nervous* (axle flipping 41.7×/min) and unable to
+put its power down. The oscillation threshold is calibrated so 151's
+11.8×/min stays quiet while 152's 41.7×/min trips the "nervous" flag. The
+race summary refuses to read a trend from contaminated laps (a parked or
+paused "lap" no longer produces a fake "pace fading"). See
+[docs/specs/2026-07-22-driving-coach-design.md](docs/specs/2026-07-22-driving-coach-design.md).
+
 ## [2.7.0] - 2026-07-22
 
 ### Changed — AI prompts hardened against context rot
