@@ -1023,8 +1023,15 @@ def build_markdown(sd: SessionData, meta: Dict[str, Any], version: str,
     add("")
     g = session.get("gearing", {})
     add(f"- Top gear used: {g.get('top_gear', '?')} · "
-        f"Upshifts: {g.get('shift_count', 0)} · "
-        f"Avg shift RPM: {g.get('shift_rpm_avg') or '–'}")
+        f"Upshifts: {g.get('shift_count', 0)}")
+    if g.get("shift_rpm_full_throttle"):
+        add(f"- On-power shift point: **{g['shift_rpm_full_throttle']:.0f} rpm** "
+            f"(median of full-throttle upshifts — the number to tune to; the "
+            f"all-upshift average of {g.get('shift_rpm_avg') or '–'} rpm reads "
+            f"lower because it includes part-throttle short-shifts out of slow "
+            f"corners)")
+    else:
+        add(f"- Avg upshift RPM: {g.get('shift_rpm_avg') or '–'}")
     if g.get("shift_rpm_spread") is not None:
         add(f"- Shift-point spread (p10–p90 of upshift RPM): "
             f"**{g['shift_rpm_spread']:.0f} rpm** *(may reflect driver "

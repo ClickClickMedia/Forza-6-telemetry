@@ -123,7 +123,7 @@
         <div class="card">
           <div class="card-head"><span class="eyebrow">Gearing &amp; shifts</span></div>
           <div class="grid cols-2">
-            <div class="stat"><span class="eyebrow">Avg shift</span><span class="v" id="shAvg">–</span><span class="u">rpm</span></div>
+            <div class="stat"><span class="eyebrow">Shift point</span><span class="v" id="shAvg">–</span><span class="u">rpm · full throttle</span></div>
             <div class="stat"><span class="eyebrow">Upshifts</span><span class="v" id="shCount">–</span></div>
             <div class="stat"><span class="eyebrow">On limiter</span><span class="v" id="limiterPct">–</span><span class="u">% of time</span></div>
             <div class="stat"><span class="eyebrow">Top gear</span><span class="v" id="topGear">–</span></div>
@@ -467,7 +467,8 @@
       setText("pillBest", (rep.has_runs ? "BEST RUN " : "BEST ") + fmtLapTime(rep.best_lap_s));
 
       const g = s.gearing || {};
-      setText("shAvg", g.shift_rpm_avg != null ? fmt(g.shift_rpm_avg, 0) : "–");
+      setText("shAvg", g.shift_rpm_full_throttle != null ? fmt(g.shift_rpm_full_throttle, 0)
+        : (g.shift_rpm_avg != null ? fmt(g.shift_rpm_avg, 0) : "–"));
       setText("shCount", fmt(g.shift_count, 0));
       setText("limiterPct", fmt(g.pct_on_limiter, 1));
       setText("topGear", fmt(g.top_gear, 0));

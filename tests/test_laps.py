@@ -60,6 +60,44 @@ def test_lap_report_free_roam_fallback():
     assert rep["session"]["distance_m"] > 0
 
 
+def test_lap_report_rejects_rivals_restart_phantom():
+    """Rivals resets LapNumber on a restart, leaving a ~0-distance segment that
+    carries a stale (fast) LastLap. It must not be reported as a complete lap
+    nor win best_lap (the '44.311' bug)."""
+    sd = _synthetic_session(seconds=120.0)
+    real_best = lap_report(sd)["best_lap_s"]
+    assert real_best and real_best > 20  # synthetic 1 km oval laps ~25 s
+
+    lap_no = sd.columns["LapNumber"].copy().astype(float)
+    last = sd.columns["LastLap"].copy().astype(float)
+    speed = sd.columns["Speed"].copy().astype(float)
+    # Tail: reset to 0, then advance 0->1 with the car stopped (no distance)
+    # and a stale LastLap of 18 s — faster than any real lap, but a phantom.
+    lap_no[-20:-10] = 0.0
+    lap_no[-10:] = 1.0
+    speed[-25:] = 0.0
+    last[-8:] = 18.0
+    sd.columns["LapNumber"] = lap_no
+    sd.columns["LastLap"] = last
+    sd.columns["Speed"] = speed
+
+    rep = lap_report(sd)
+    complete_times = [l["time_s"] for l in rep["laps"]
+                      if l["complete"] and l["time_s"]]
+    assert 18.0 not in complete_times          # phantom rejected...
+    assert rep["best_lap_s"] > 20              # ...and it did not win best_lap
+
+
+def test_gearing_reports_on_power_shift_point():
+    """The on-power shift point is exposed and sits at/above the plain average
+    (part-throttle short-shifts drag the average down)."""
+    sd = _synthetic_session(seconds=120.0)
+    g = lap_report(sd)["session"]["gearing"]
+    assert "shift_rpm_full_throttle" in g
+    if g["shift_rpm_full_throttle"] and g["shift_rpm_avg"]:
+        assert g["shift_rpm_full_throttle"] >= g["shift_rpm_avg"] - 1
+
+
 def test_markdown_export_contains_key_sections():
     sd = _synthetic_session(seconds=60.0)
     meta = {"name": "Test Session", "car_ordinal": 2145, "car_class": 5,

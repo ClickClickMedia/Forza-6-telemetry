@@ -26,8 +26,11 @@ _WHEEL_SUFFIX = ["FrontLeft", "FrontRight", "RearLeft", "RearRight"]
 
 # --- Tunable thresholds -----------------------------------------------------
 MIN_LAP_S = 15.0          # ignore "laps" shorter than this (glitch guard)
+MIN_LAP_DIST_FRAC = 0.5   # a complete lap must cover >= this x the longest lap's
+MIN_LAP_DIST_FLOOR_M = 200.0  # ...distance (kills ~0 m Rivals-restart phantoms)
 CORNERING_LAT_G = 0.30    # |lateral g| above this counts as cornering
 FULL_THROTTLE = 0.98      # fraction of 255
+SHIFT_ON_POWER = 0.90     # throttle floor for an "on-power" upshift (shift point)
 BRAKING_MIN = 0.05
 LIMITER_RPM_FRAC = 0.97   # fraction of EngineMaxRpm counted as "on limiter"
 SUSP_BOTTOM_OUT = 0.98
@@ -464,13 +467,16 @@ def _seg_indices(sd: SessionData) -> List[Dict[str, Any]]:
         i0, i1 = bounds[k], bounds[k + 1]
         if i1 <= i0:
             continue
+        # A complete lap is one whose lap number ADVANCED at its end: not the
+        # trailing partial, and not a segment cut short by a LapNumber RESET
+        # (Rivals restarts drop it back to 0 — that truncated lap isn't real).
+        complete = (k < len(bounds) - 2
+                    and int(lap_no[i1]) > int(lap_no[i0]))
         segments.append({
             "lap": int(lap_no[i0]),
             "i0": i0,
             "i1": i1,
-            # A segment is a complete lap when the lap number advanced at its
-            # end (i.e. it is not the trailing partial segment).
-            "complete": k < len(bounds) - 2,
+            "complete": complete,
         })
     return segments
 
@@ -481,6 +487,11 @@ def _lap_time(sd: SessionData, seg: Dict[str, Any]) -> Optional[float]:
     On completion Horizon writes the finished lap's time into ``LastLap`` of
     the *next* frames; ``CurrentLap`` at the last in-segment frame is the
     fallback (slightly short by up to one frame interval).
+
+    (Rivals restart phantoms — ~0-distance segments carrying a stale ``LastLap``
+    — are filtered by the distance/restart guards in ``lap_report``, not here;
+    ``CurrentLap`` can't be used to reject them because some genuine laps ship
+    with ``CurrentLap`` pinned at 0.)
     """
     from .packet import sane_lap
 
@@ -846,6 +857,14 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
 
     upshift_idx = np.where(np.diff(gear) > 0)[0] if gear.size > 1 else np.array([])
     shift_rpms = rpm[upshift_idx] if upshift_idx.size else np.array([])
+    # The tuning-relevant number is the ON-POWER shift point: part-throttle
+    # short-shifts out of slow corners drag the plain mean well below where the
+    # driver actually shifts at full throttle, so gate on throttle and report
+    # the median (a tight cluster) separately from the all-upshift average.
+    ft_up = upshift_idx[accel[upshift_idx] >= SHIFT_ON_POWER] if upshift_idx.size else upshift_idx
+    ft_shift_rpms = rpm[ft_up] if ft_up.size else np.array([])
+    shift_rpm_full = (round(float(np.median(ft_shift_rpms)), 0)
+                      if ft_shift_rpms.size >= 3 else None)
     # Shift-point consistency: p10–p90 spread of upshift RPM. A wide spread
     # is a driver signal (inconsistent shift points), not a tune signal.
     shift_rpm_spread = (round(float(np.percentile(shift_rpms, 90)
@@ -978,6 +997,7 @@ def _slice_stats(sd: SessionData, i0: int, i1: int) -> Dict[str, Any]:
             if np.any((gear >= 1) & (gear <= 10)) else 0,
             "pct_on_limiter": round(_pct(on_limiter, dt), 1),
             "shift_rpm_avg": round(float(np.mean(shift_rpms)), 0) if shift_rpms.size else None,
+            "shift_rpm_full_throttle": shift_rpm_full,
             "shift_rpm_spread": shift_rpm_spread,
             "shift_count": int(shift_rpms.size),
         },
@@ -1040,13 +1060,24 @@ def lap_report(sd: SessionData) -> Dict[str, Any]:
     lap_source = "wire" if has_laps else None
     event_time_s = None
     if has_laps:
-        for seg in segments:
-            stats = _slice_stats(sd, seg["i0"], seg["i1"])
-            t = _lap_time(sd, seg)
-            if seg["lap"] is not None and seg["complete"] and (
-                t is None or t < MIN_LAP_S
-            ):
-                continue  # glitch segment (e.g. restart)
+        prepared = [(seg, _slice_stats(sd, seg["i0"], seg["i1"]), _lap_time(sd, seg))
+                    for seg in segments]
+        # A real game lap covers real distance. Rivals restarts leave
+        # near-zero-distance staging/restart segments carrying a stale LastLap
+        # (observed: a phantom "44.311" with 0 m behind it winning best_lap).
+        # Circuit laps are all ~one length, so half the longest valid lap
+        # cleanly separates the phantoms; reject them so they cannot pass as a
+        # lap or set best_lap.
+        good_dists = [s["distance_m"] for seg, s, t in prepared
+                      if seg["complete"] and t and t >= MIN_LAP_S]
+        min_lap_dist = (max(MIN_LAP_DIST_FLOOR_M,
+                            MIN_LAP_DIST_FRAC * max(good_dists))
+                        if good_dists else 0.0)
+        for seg, stats, t in prepared:
+            phantom = seg["complete"] and (
+                t is None or t < MIN_LAP_S or stats["distance_m"] < min_lap_dist)
+            if seg["lap"] is not None and phantom:
+                continue  # restart phantom / glitch segment
             laps.append({
                 "lap": seg["lap"],
                 "complete": seg["complete"],
